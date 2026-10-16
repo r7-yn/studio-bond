@@ -41,7 +41,7 @@ export default function App() {
   // Theme state with localStorage persistence
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('orchest_theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    return (saved === 'light' || saved === 'dark') ? saved : 'light';
   });
 
   // App navigation state
