@@ -34,6 +34,17 @@ export const Hero: React.FC<HeroProps> = ({
       {/* Background Decorative Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-[#D4AF37]/10 blur-[130px] rounded-full pointer-events-none -z-10" />
 
+      {/* Decorative animated sound wave */}
+      <div className="absolute inset-x-0 top-1/3 -z-10 flex items-center justify-center gap-1.5 h-40 pointer-events-none opacity-60" aria-hidden="true">
+        {Array.from({ length: 48 }, (_, i) => (
+          <span
+            key={i}
+            className="w-1 sm:w-1.5 rounded-full bg-o-primary/40 animate-[orchest-wave_2.4s_ease-in-out_infinite]"
+            style={{ height: `${30 + Math.abs(Math.sin(i * 0.55)) * 70}%`, animationDelay: `${(i % 12) * 0.15}s` }}
+          />
+        ))}
+      </div>
+
       <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
         {/* Subtle pill tag */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 mb-6 backdrop-blur-md">
