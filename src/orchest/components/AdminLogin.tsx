@@ -69,14 +69,13 @@ export function AdminLogin({ theme, onAuthenticated, onCancel }: AdminLoginProps
               type="password"
               autoComplete="current-password"
               required
-              minLength={12}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className={`w-full px-4 py-3 rounded-xl border outline-none ${isDark ? 'bg-black/30 border-white/10 text-white focus:border-[#D4AF37]' : 'bg-gray-50 border-black/10 text-black focus:border-[#B89728]'}`}
             />
           </div>
           {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-          <button type="submit" disabled={isSubmitting || password.length < 12} className="w-full py-3.5 rounded-xl bg-[#D4AF37] text-black font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+          <button type="submit" disabled={isSubmitting || password.length === 0} className="w-full py-3.5 rounded-xl bg-[#D4AF37] text-black font-bold disabled:opacity-50 flex items-center justify-center gap-2">
             <LogIn className="w-5 h-5" aria-hidden="true" />
             {isSubmitting ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
           </button>
