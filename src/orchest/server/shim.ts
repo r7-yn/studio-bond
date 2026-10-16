@@ -88,7 +88,7 @@ interface GenerateArgs {
 export function createGatewayAiClient() {
   return {
     models: {
-      async generateContent({ contents, config }: GenerateArgs): Promise<{ text: string }> {
+      async generateContent({ model, contents, config }: GenerateArgs): Promise<{ text: string }> {
         const key = process.env.LOVABLE_API_KEY;
         if (!key) throw new Error("LOVABLE_API_KEY missing");
         const schemaNote = config?.responseSchema
@@ -102,7 +102,7 @@ export function createGatewayAiClient() {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
+            model: `google/${model ?? "gemini-3.8-flash"}`,
             messages,
             temperature: config?.temperature,
             response_format: config?.responseSchema ? { type: "json_object" } : undefined,
