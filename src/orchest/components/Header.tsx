@@ -55,6 +55,17 @@ export const Header: React.FC<HeaderProps> = ({
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="فتح القائمة الرئيسية"
+              className={`lg:hidden p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer ${
+                isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-black/10 text-black hover:bg-black/5'
+              }`}
+            >
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
           {/* Logo & Brand */}
           <div 
             onClick={() => onNavigate('home')} 
@@ -82,6 +93,8 @@ export const Header: React.FC<HeaderProps> = ({
                 منصة الزفات الخليجية والشيلات
               </span>
             </div>
+          </div>
+
           </div>
 
           {/* Desktop Navigation Links */}
@@ -165,16 +178,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>اطلب زفتك الآن</span>
             </button>
 
-            {/* Mobile Hamburger Menu Toggle */}
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              aria-label="فتح القائمة الرئيسية"
-              className={`lg:hidden p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer ${
-                isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-black/10 text-black hover:bg-black/5'
-              }`}
-            >
-              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
           </div>
         </div>
       </header>

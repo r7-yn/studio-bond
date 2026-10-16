@@ -89,11 +89,11 @@ function verifyAdminPassword(password: string): boolean {
 
 function setSessionCookie(res: ShimRes, token: string): void {
   const secure = process.env['NODE_ENV'] === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_MS / 1000}${secure}`);
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${SESSION_TTL_MS / 1000}${secure}`);
 }
 
 function clearSessionCookie(res: ShimRes): void {
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=None; Partitioned; Secure; Max-Age=0`);
 }
 
 // Stateless signed sessions: Workers keep no memory between requests, so the cookie
