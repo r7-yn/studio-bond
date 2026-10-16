@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, MessageCircle, Calendar, Sparkles, Send, CheckCircle2, Clock, Music } from 'lucide-react';
+import { X, MessageCircle, Sparkles, CheckCircle2, ArrowRight, ArrowLeft, Music, Check } from 'lucide-react';
 import { Track, ThemeMode, OrderRequest } from '../types/index';
 import { generateWhatsAppMessage, generateWhatsAppUrl } from '../utils/trackLogic';
 import { STUDIO_WHATSAPP_NUMBER } from '../data/mockData';
+import { validateOrderStep, ORDER_STEPS, type OrderStep } from '../utils/orderSteps';
 
 interface OrderModalProps {
   track: Track;
@@ -13,47 +14,71 @@ interface OrderModalProps {
   whatsappNumber?: string;
 }
 
+const modificationOptions = [
+  { value: 'تغيير الأسماء فقط', hint: 'نفس العمل مع أسمائكم' },
+  { value: 'إضافة مقدمة صوتية وشعر خاص بالأسماء', hint: 'مقدمة شعرية تليق بالمناسبة' },
+  { value: 'تعديل الإيقاع والمؤثرات (دفوف / بدون موسيقى)', hint: 'اختيار الإيقاع المناسب' },
+  { value: 'تنفيذ زفة حصرية كاملة من الصفر', hint: 'عمل خاص بكم بالكامل' },
+];
+
+const inputClass =
+  'w-full px-4 py-3 rounded-[10px] border border-o-border bg-o-bg text-o-text placeholder:text-o-muted text-sm outline-none transition-colors focus:border-o-primary';
+
 export const OrderModal: React.FC<OrderModalProps> = ({
   track,
   isOpen,
   onClose,
   onSubmitOrder,
-  theme,
   whatsappNumber = STUDIO_WHATSAPP_NUMBER,
 }) => {
+  const [step, setStep] = useState<OrderStep>(0);
   const [clientNames, setClientNames] = useState('');
-  const [modificationType, setModificationType] = useState('تغيير الأسماء فقط');
+  const [modificationType, setModificationType] = useState(modificationOptions[0].value);
   const [occasionDate, setOccasionDate] = useState('');
   const [notes, setNotes] = useState('');
   const [phone, setPhone] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const isDark = theme === 'dark';
+  const form = { clientNames, modificationType, occasionDate, notes, phone };
 
-  const modificationOptions = [
-    'تغيير الأسماء فقط',
-    'إضافة مقدمة صوتية وشعر خاص بالأسماء',
-    'تعديل الإيقاع والمؤثرات (دفوف / بدون موسيقى)',
-    'تنفيذ زفة حصرية كاملة من الصفر',
-  ];
+  const goNext = () => {
+    const problem = validateOrderStep(step, form);
+    if (problem) return setError(problem);
+    setError(null);
+    setStep((s) => (Math.min(2, s + 1) as OrderStep));
+  };
+  const goBack = () => {
+    setError(null);
+    setStep((s) => (Math.max(0, s - 1) as OrderStep));
+  };
 
-  const handleSendOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitError(null);
-
-    if (!clientNames.trim() || clientNames.trim().length > 120) {
-      alert('يرجى كتابة أسماء العروسين أو صاحب المناسبة');
-      return;
+  const handleSendOrder = () => {
+    for (const s of [0, 1] as OrderStep[]) {
+      const problem = validateOrderStep(s, form);
+      if (problem) {
+        setStep(s);
+        return setError(problem);
+      }
     }
-    if (notes.trim().length > 500) {
-      setSubmitError('الملاحظات طويلة جداً. الحد الأقصى 500 حرف.');
-      return;
-    }
+    const message = generateWhatsAppMessage(track, {
+      clientNames,
+      modificationType,
+      occasionDate,
+      notes,
+      customPhone: phone,
+    });
+    const whatsappUrl = generateWhatsAppUrl(whatsappNumber, message);
+    if (!whatsappUrl) return setError('رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.');
 
-    const orderRecord: OrderRequest = {
+    // Open during the click gesture; delayed window.open calls are often blocked.
+    const whatsappWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!whatsappWindow) return setError('تعذر فتح واتساب. يرجى السماح بالنوافذ المنبثقة ثم المحاولة مرة أخرى.');
+    whatsappWindow.location.href = whatsappUrl;
+
+    onSubmitOrder({
       id: `ord-${Date.now()}`,
       trackId: track.id,
       trackCode: track.code,
@@ -65,247 +90,259 @@ export const OrderModal: React.FC<OrderModalProps> = ({
       phone: phone.trim() || undefined,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'جديد',
-    };
-
-    // Build WhatsApp URL
-    const message = generateWhatsAppMessage(track, {
-      clientNames,
-      modificationType,
-      occasionDate,
-      notes,
-      customPhone: phone,
     });
-    const whatsappUrl = generateWhatsAppUrl(whatsappNumber, message);
-    if (!whatsappUrl) {
-      setSubmitError('رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.');
-      return;
-    }
-
-    // Open during the submit gesture; delayed window.open calls are often blocked.
-    const whatsappWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!whatsappWindow) {
-      setSubmitError('تعذر فتح واتساب تلقائياً. يرجى السماح بالنوافذ المنبثقة ثم المحاولة مرة أخرى.');
-      return;
-    }
-    whatsappWindow.location.href = whatsappUrl;
-    onSubmitOrder(orderRecord);
-
     setShowSuccess(true);
-
     setTimeout(() => {
       onClose();
       setShowSuccess(false);
-    }, 900);
+      setStep(0);
+    }, 1200);
   };
 
-  const previewMessage = generateWhatsAppMessage(track, {
-    clientNames: clientNames || 'أحمد & نورة',
-    modificationType,
-    occasionDate: occasionDate || '2026-11-20',
-    notes,
-  });
+  const progress = ((step + 1) / ORDER_STEPS.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      {/* Backdrop */}
-      <div 
-        onClick={onClose} 
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
-      />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" dir="rtl">
+      <div onClick={onClose} className="fixed inset-0 bg-o-overlay backdrop-blur-sm" />
 
-      {/* Modal / Bottom Sheet */}
       <div
-        className={`relative w-full sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border shadow-2xl p-6 sm:p-8 transition-transform duration-300 z-10 ${
-          isDark
-            ? 'bg-[#16161C] border-white/10 text-white'
-            : 'bg-white border-black/10 text-black'
-        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="طلب الزفة باسمك"
+        className="relative z-10 w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-o-border bg-o-surface text-o-text shadow-o-elevated animate-in fade-in slide-in-from-bottom-4 duration-300"
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-[#D4AF37]/20 text-[#D4AF37]">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-[10px] bg-o-primary/15 text-o-primary">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg sm:text-xl font-bold">طلب الزفة باسمك</h3>
-              <p className="text-xs text-gray-400">تنفيذ استوديو أوركست مع إمكانية التعديل الفوري</p>
+              <h3 className="text-lg sm:text-xl font-semibold">طلب الزفة باسمك</h3>
+              <p className="text-xs text-o-muted">ثلاث خطوات بسيطة ثم نكمل معك عبر واتساب</p>
             </div>
           </div>
-
           <button
             onClick={onClose}
             aria-label="إغلاق نافذة الطلب"
-            className="p-2 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-[10px] text-o-muted hover:bg-o-surface-hover hover:text-o-text transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Selected Track Preview Badge */}
-        <div
-          className={`flex items-center gap-3 p-3 rounded-2xl border mb-6 ${
-            isDark ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-black/10'
-          }`}
-        >
-          <img
-            src={track.coverUrl}
-            alt={track.title}
-            className="w-14 h-14 rounded-xl object-cover shrink-0 border border-[#D4AF37]/30"
-          />
-          <div className="min-w-0 flex-1">
-            <h4 className="font-bold text-sm truncate">{track.title}</h4>
-            <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
-              <span>المنشد: {track.artist}</span>
-              <span>•</span>
-              <span dir="ltr" className="font-mono text-[#D4AF37]">{track.code}</span>
-              <span>•</span>
-              <span>{track.durationFormatted}</span>
-            </div>
+        {/* Stepper + progress bar */}
+        <div className="px-6 pb-5">
+          <ol className="flex items-center justify-between mb-3">
+            {ORDER_STEPS.map((label, i) => {
+              const done = i < step;
+              const active = i === step;
+              return (
+                <li key={label} className="flex items-center gap-2 text-xs sm:text-sm">
+                  <span
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                      done
+                        ? 'bg-o-primary border-o-primary text-o-on-primary'
+                        : active
+                          ? 'border-o-primary text-o-primary'
+                          : 'border-o-border text-o-muted'
+                    }`}
+                  >
+                    {done ? <Check className="w-4 h-4" /> : i + 1}
+                  </span>
+                  <span className={active || done ? 'font-medium text-o-text' : 'text-o-muted'}>{label}</span>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="h-1.5 w-full rounded-full bg-o-border overflow-hidden" aria-hidden="true">
+            <div className="h-full rounded-full bg-o-primary transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        {/* Success Confirmation state */}
         {showSuccess ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center mb-4">
+          <div className="text-center px-6 py-12">
+            <div className="w-16 h-16 rounded-full bg-o-whatsapp/15 text-o-whatsapp mx-auto flex items-center justify-center mb-4">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h4 className="text-xl font-bold mb-2">تم تجهيز طلبك بنجاح!</h4>
-            <p className="text-sm text-gray-400">
-              جاري نقلك إلى محادثة واتساب الاستوديو لتأكيد التفاصيل...
-            </p>
+            <h4 className="text-xl font-semibold mb-2">تم تجهيز طلبك</h4>
+            <p className="text-sm text-o-muted">ننقلك الآن إلى محادثة واتساب الاستوديو لتأكيد التفاصيل</p>
           </div>
         ) : (
-          /* Checkout Form */
-          <form onSubmit={handleSendOrder} className="space-y-4">
-            {/* Field 1: أسماء العروسين */}
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold mb-1.5 text-gray-300">
-                أسماء العروسين / صاحب المناسبة <span className="text-[#D4AF37]">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={clientNames}
-                onChange={(e) => setClientNames(e.target.value)}
-                placeholder="مثال: أحمد ونورة / عائلة آل سبيعي"
-                className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-all ${
-                  isDark
-                    ? 'bg-black/40 border-white/10 focus:border-[#D4AF37] text-white placeholder-gray-500'
-                    : 'bg-gray-50 border-black/10 focus:border-[#B89728] text-black placeholder-gray-400'
-                }`}
-              />
-            </div>
+          <div className="grid gap-6 px-6 pb-6 sm:grid-cols-[1fr_15rem]">
+            {/* Step content */}
+            <div className="space-y-4 min-w-0">
+              {step === 0 && (
+                <fieldset className="space-y-3">
+                  <legend className="text-sm font-semibold mb-2">اختر نوع الطلب</legend>
+                  {modificationOptions.map((opt) => {
+                    const selected = modificationType === opt.value;
+                    return (
+                      <button
+                        type="button"
+                        key={opt.value}
+                        onClick={() => setModificationType(opt.value)}
+                        aria-pressed={selected}
+                        className={`w-full text-right flex items-center gap-3 p-4 rounded-[10px] border transition-colors ${
+                          selected
+                            ? 'border-o-primary bg-o-primary/10'
+                            : 'border-o-border bg-o-bg hover:bg-o-surface-hover'
+                        }`}
+                      >
+                        <span
+                          className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center ${
+                            selected ? 'border-o-primary' : 'border-o-border'
+                          }`}
+                        >
+                          {selected && <span className="h-2.5 w-2.5 rounded-full bg-o-primary" />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{opt.value}</span>
+                          <span className="block text-xs text-o-muted mt-0.5">{opt.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </fieldset>
+              )}
 
-            {/* Field 2: نوع التعديل المطلوب */}
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold mb-1.5 text-gray-300">
-                نوع التعديل المطلوب
-              </label>
-              <select
-                value={modificationType}
-                onChange={(e) => setModificationType(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-all cursor-pointer ${
-                  isDark
-                    ? 'bg-[#16161C] border-white/10 focus:border-[#D4AF37] text-white'
-                    : 'bg-gray-50 border-black/10 focus:border-[#B89728] text-black'
-                }`}
-              >
-                {modificationOptions.map((opt, i) => (
-                  <option key={i} value={opt} className={isDark ? 'bg-[#16161C] text-white' : 'bg-white text-black'}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {step === 1 && (
+                <div className="space-y-4">
+                  <label className="block">
+                    <span className="block text-sm font-medium mb-1.5">
+                      أسماء العروسين أو صاحب المناسبة <span className="text-o-primary">*</span>
+                    </span>
+                    <input
+                      autoFocus
+                      value={clientNames}
+                      onChange={(e) => setClientNames(e.target.value)}
+                      placeholder="مثال: أحمد ونورة"
+                      maxLength={120}
+                      className={inputClass}
+                    />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="block text-sm font-medium mb-1.5">تاريخ المناسبة (اختياري)</span>
+                      <input type="date" value={occasionDate} onChange={(e) => setOccasionDate(e.target.value)} className={inputClass} />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium mb-1.5">رقم التواصل (اختياري)</span>
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="05xxxxxxxx"
+                        className={`${inputClass} text-left`}
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="block text-sm font-medium mb-1.5">ملاحظات إضافية</span>
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      maxLength={500}
+                      placeholder="أي تفاصيل تحب نعرفها"
+                      className={`${inputClass} resize-none`}
+                    />
+                    <span className="block text-left text-xs text-o-muted mt-1">{notes.length}/500</span>
+                  </label>
+                </div>
+              )}
 
-            {/* Field 3: تاريخ المناسبة */}
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold mb-1.5 text-gray-300">
-                تاريخ المناسبة (اختياري)
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={occasionDate}
-                  onChange={(e) => setOccasionDate(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-all ${
-                    isDark
-                      ? 'bg-black/40 border-white/10 focus:border-[#D4AF37] text-white'
-                      : 'bg-gray-50 border-black/10 focus:border-[#B89728] text-black'
-                  }`}
-                />
+              {step === 2 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold">راجع طلبك قبل الإرسال</h4>
+                  <dl className="divide-y divide-o-border rounded-[10px] border border-o-border bg-o-bg text-sm">
+                    {[
+                      ['نوع الطلب', modificationType, 0],
+                      ['الأسماء', clientNames, 1],
+                      ['تاريخ المناسبة', occasionDate || 'لم يحدد', 1],
+                      ['رقم التواصل', phone || 'لم يحدد', 1],
+                      ['ملاحظات', notes || 'لا توجد', 1],
+                    ].map(([k, v, s]) => (
+                      <div key={k as string} className="flex items-start justify-between gap-3 p-3">
+                        <dt className="text-o-muted shrink-0">{k}</dt>
+                        <dd className="flex-1 text-left break-words">{v}</dd>
+                        <button
+                          type="button"
+                          onClick={() => setStep(s as OrderStep)}
+                          className="text-xs text-o-primary hover:underline shrink-0"
+                        >
+                          تعديل
+                        </button>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="text-xs text-o-muted">سيُفتح واتساب برسالة جاهزة لتأكيد الطلب مع فريق الاستوديو.</p>
+                </div>
+              )}
+
+              {error && (
+                <p role="alert" className="rounded-[10px] border border-o-danger/30 bg-o-danger/10 px-3 py-2 text-sm text-o-danger">
+                  {error}
+                </p>
+              )}
+
+              {/* Navigation */}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                {step > 0 ? (
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-o-border px-4 text-sm font-medium hover:bg-o-surface-hover transition-colors"
+                  >
+                    <ArrowRight className="w-4 h-4" /> السابق
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {step < 2 ? (
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-primary px-5 text-sm font-semibold text-o-on-primary hover:bg-o-primary-hover transition-colors"
+                  >
+                    التالي <ArrowLeft className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSendOrder}
+                    className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-whatsapp px-5 text-sm font-semibold text-o-on-whatsapp hover:bg-o-whatsapp-hover transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" /> تأكيد عبر واتساب
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Field 4: رقم الجوال (اختياري) */}
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold mb-1.5 text-gray-300">
-                رقم التواصل للتأكيد (اختياري)
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="05XXXXXXXX"
-                dir="ltr"
-                className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-all text-right ${
-                  isDark
-                    ? 'bg-black/40 border-white/10 focus:border-[#D4AF37] text-white placeholder-gray-500'
-                    : 'bg-gray-50 border-black/10 focus:border-[#B89728] text-black placeholder-gray-400'
-                }`}
-              />
-            </div>
-
-            {/* Field 5: ملاحظات إضافية */}
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold mb-1.5 text-gray-300">
-                ملاحظات أو طلبات خاصة باللحن
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="مثال: إضافة زغاريد في البداية، تكرار مقطع معين..."
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm font-medium outline-none resize-none transition-all ${
-                  isDark
-                    ? 'bg-black/40 border-white/10 focus:border-[#D4AF37] text-white placeholder-gray-500'
-                    : 'bg-gray-50 border-black/10 focus:border-[#B89728] text-black placeholder-gray-400'
-                }`}
-              />
-            </div>
-
-            {/* Live Message Accordion Preview */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs">
-              <span className="font-bold text-[#D4AF37] block mb-1">
-                معاينة نص الرسالة التي ستُرسل إلى واتساب:
-              </span>
-              <p className="whitespace-pre-line text-gray-300 text-[11px] leading-relaxed line-clamp-3">
-                {previewMessage}
-              </p>
-            </div>
-
-            {/* Final Submit Button */}
-            <div className="pt-2 pb-1">
-              <button
-                type="submit"
-                className="w-full py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base transition-all duration-300 shadow-xl cursor-pointer bg-[#25D366] hover:bg-[#20ba59] text-white flex items-center justify-center gap-2.5 active:scale-98 shadow-emerald-900/30"
-              >
-                <MessageCircle className="w-5 h-5 fill-current" />
-                <span>إرسال الطلب إلى واتساب الاستوديو 🎵</span>
-              </button>
-            </div>
-
-            <p className="text-center text-[11px] text-gray-400">
-              سيتم نقلك مباشرة إلى واتساب الاستوديو مع حفظ طلبك في سجل الطلبات
-            </p>
-            {submitError && (
-              <p role="alert" className="text-center text-xs text-red-400">
-                {submitError}
-              </p>
-            )}
-          </form>
+            {/* Live order summary (no prices by design) */}
+            <aside className="rounded-2xl border border-o-border bg-o-bg p-4 h-fit sm:sticky sm:top-4">
+              <p className="text-xs font-medium text-o-muted mb-3">ملخص الطلب</p>
+              <div className="flex items-center gap-3 mb-4">
+                <img src={track.coverUrl} alt={track.title} className="w-12 h-12 rounded-[10px] object-cover" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{track.title}</p>
+                  <p className="text-xs text-o-muted truncate">{track.artist}</p>
+                </div>
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li className="flex items-center gap-2">
+                  <Music className="w-3.5 h-3.5 text-o-primary shrink-0" />
+                  <span dir="ltr" className="font-mono text-o-primary">{track.code}</span>
+                  <span className="text-o-muted">• {track.durationFormatted}</span>
+                </li>
+                <li className="text-o-muted">الطلب: <span className="text-o-text">{modificationType}</span></li>
+                <li className="text-o-muted">الأسماء: <span className="text-o-text">{clientNames || '—'}</span></li>
+                <li className="text-o-muted">التاريخ: <span className="text-o-text">{occasionDate || '—'}</span></li>
+                <li className="text-o-muted">مدة التنفيذ: <span className="text-o-text">{track.executionDays}</span></li>
+              </ul>
+            </aside>
+          </div>
         )}
       </div>
     </div>
