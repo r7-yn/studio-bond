@@ -1,5 +1,5 @@
 // Ported from the original Express server.ts; handlers run on the Worker through a small req/res shim.
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from './shim';
 
