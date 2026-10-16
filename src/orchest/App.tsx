@@ -157,10 +157,10 @@ export default function App() {
     localStorage.setItem('orchest_theme', theme);
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-      document.documentElement.dataset.theme = 'dark';
+      document.documentElement.dataset['theme'] = 'dark';
     } else {
       document.documentElement.classList.remove('dark');
-      document.documentElement.dataset.theme = 'light';
+      document.documentElement.dataset['theme'] = 'light';
     }
   }, [theme]);
 
