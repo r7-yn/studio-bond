@@ -88,6 +88,20 @@ export default function App() {
     });
   };
 
+  const handleReorderCategories = (fromId: string, toId: string) => {
+    setCategories((prev) => {
+      const from = prev.findIndex((c) => c.id === fromId);
+      const to = prev.findIndex((c) => c.id === toId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(from, 1);
+      if (moved) updated.splice(to, 0, moved);
+      localStorage.setItem('orchest_categories', JSON.stringify(updated));
+      return updated;
+    });
+    toast.success('تم تحديث ترتيب التصنيفات');
+  };
+
   const handleDeleteCategory = (categoryId: string) => {
     setCategories((prev) => {
       const updated = prev.filter((c) => c.id !== categoryId);
@@ -700,6 +714,7 @@ export default function App() {
               onToggleTrend={handleToggleTrend}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
+              onReorderCategories={handleReorderCategories}
               theme={theme}
               csrfToken={adminCsrfToken}
               onLogout={handleAdminLogout}
