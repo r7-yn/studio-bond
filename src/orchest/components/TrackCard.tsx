@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React from 'react';
 import { Play, Pause, Heart, Share2, MessageCircle, Eye, ThumbsUp, Sparkles } from 'lucide-react';
 import { Track, ThemeMode } from '../types/index';
@@ -37,7 +38,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
       }).catch(() => {});
     } else {
       navigator.clipboard.writeText(shareUrl);
-      alert('تم نسخ رابط الزفة بنجاح!');
+      toast.success('تم نسخ رابط الزفة');
     }
   };
 

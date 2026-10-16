@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React, { useState } from 'react';
 import { 
   Users, 
@@ -168,7 +169,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) {
-      alert('يرجى إدخال اسم التصنيف');
+      toast.error('يرجى إدخال اسم التصنيف');
       return;
     }
 
@@ -191,7 +192,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateTrack = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim()) {
-      alert('يرجى إدخال اسم العمل واسم المنشد');
+      toast.error('يرجى إدخال اسم العمل واسم المنشد');
       return;
     }
 

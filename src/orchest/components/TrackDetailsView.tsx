@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React from 'react';
 import { 
   Play, 
@@ -86,7 +87,7 @@ export const TrackDetailsView: React.FC<TrackDetailsViewProps> = ({
       }).catch(() => {});
     } else {
       navigator.clipboard.writeText(url);
-      alert('تم نسخ رابط العمل بنجاح!');
+      toast.success('تم نسخ رابط العمل');
     }
   };
 

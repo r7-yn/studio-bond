@@ -196,6 +196,7 @@ export default function App() {
   };
 
   const toggleFavorite = (trackId: string) => {
+    toast.success(favorites.includes(trackId) ? 'أزيل العمل من المفضلة' : 'أضيف العمل إلى المفضلة');
     setFavorites((prev) =>
       prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId]
     );
@@ -242,6 +243,7 @@ export default function App() {
   };
 
   const handleSubmitOrder = (order: OrderRequest) => {
+    toast.success('تم تجهيز طلبك', { description: 'أكمل التأكيد في محادثة واتساب' });
     setOrders((prev) => [order, ...prev]);
     setKpi((prev) => {
       const newLeads = prev.whatsappLeads + 1;
