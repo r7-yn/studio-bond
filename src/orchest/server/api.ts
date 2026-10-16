@@ -182,7 +182,7 @@ function recordLoginFailure(req: ShimReq): void {
   const current = loginWindows.get(key);
   if (!current || current.resetAt <= now) {
     loginWindows.set(key, { count: 1, resetAt: now + 15 * 60_000 });
-    return null;
+    return;
   }
   current.count += 1;
 }
