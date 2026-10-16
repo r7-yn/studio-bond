@@ -66,7 +66,14 @@ function getAdminPasswordHash(): string | null {
 
 function verifyAdminPassword(password: string): boolean {
   const configured = getAdminPasswordHash();
-  if (!configured) return false;
+  if (!configured) {
+    // Fallback: plain ADMIN_PASSWORD stored as a server-only secret, compared in constant time.
+    const plain = process.env['ADMIN_PASSWORD'];
+    if (!plain || plain.length < 8) return false;
+    const a = createHmac('sha256', 'cmp').update(password).digest();
+    const b = createHmac('sha256', 'cmp').update(plain).digest();
+    return timingSafeEqual(a, b);
+  }
   const parts = configured.split('$');
   if (parts.length !== 5 || parts[1] !== 'sha512') return false;
   const iterations = Number(parts[2]);
