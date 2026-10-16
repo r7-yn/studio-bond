@@ -33,7 +33,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({
 }) => {
   const [step, setStep] = useState<OrderStep>(0);
   const [clientNames, setClientNames] = useState('');
-  const [modificationType, setModificationType] = useState(modificationOptions[0].value);
+  const [modificationType, setModificationType] = useState('تغيير الأسماء فقط');
   const [occasionDate, setOccasionDate] = useState('');
   const [notes, setNotes] = useState('');
   const [phone, setPhone] = useState('');
@@ -87,7 +87,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({
       modificationType,
       occasionDate,
       notes: notes.trim(),
-      phone: phone.trim() || undefined,
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'جديد',
     });

@@ -48,7 +48,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
-  const [selectedTrack, setSelectedTrack] = useState<Track | null>(INITIAL_TRACKS[0]);
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(INITIAL_TRACKS[0] ?? null);
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [categories, setCategories] = useState<Category[]>(() => {
     try {
@@ -66,7 +66,7 @@ export default function App() {
       return INITIAL_ARTISTS;
     }
   });
-  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(INITIAL_ARTISTS[0]);
+  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(INITIAL_ARTISTS[0] ?? null);
   const [orders, setOrders] = useState<OrderRequest[]>(INITIAL_ORDERS);
   const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(() => {
@@ -120,7 +120,7 @@ export default function App() {
 
   // Modals state
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [orderModalTrack, setOrderModalTrack] = useState<Track>(INITIAL_TRACKS[0]);
+  const [orderModalTrack, setOrderModalTrack] = useState<Track>(INITIAL_TRACKS[0] as Track);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isAiConciergeOpen, setIsAiConciergeOpen] = useState(false);
 
@@ -206,6 +206,7 @@ export default function App() {
     if (!selectedTrack) return;
     const currentIndex = tracks.findIndex((t) => t.id === selectedTrack.id);
     const nextTrack = tracks[(currentIndex + 1) % tracks.length];
+    if (!nextTrack) return;
     setSelectedTrack(nextTrack);
     audioEngine.play(nextTrack.id, nextTrack.duration, nextTrack.audioFreq || 261.63);
   };
@@ -215,6 +216,7 @@ export default function App() {
     const currentIndex = tracks.findIndex((t) => t.id === selectedTrack.id);
     const prevIndex = (currentIndex - 1 + tracks.length) % tracks.length;
     const prevTrack = tracks[prevIndex];
+    if (!prevTrack) return;
     setSelectedTrack(prevTrack);
     audioEngine.play(prevTrack.id, prevTrack.duration, prevTrack.audioFreq || 261.63);
   };
@@ -278,7 +280,7 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onOpenSearch={() => setIsSearchModalOpen(true)}
-        onQuickOrder={() => openOrderModalForTrack(selectedTrack || tracks[0])}
+        onQuickOrder={() => { const t = selectedTrack ?? tracks[0]; if (t) openOrderModalForTrack(t); }}
         favoritesCount={favorites.length}
       />
 

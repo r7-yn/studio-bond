@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { 
   formatDuration,
@@ -99,17 +99,17 @@ test('filterTracks filters by query, category, and rhythm', () => {
   // Filter by query
   const queryResult = filterTracks(list, 'بن خالد');
   assert.equal(queryResult.length, 1);
-  assert.equal(queryResult[0].id, 'track-2');
+  assert.equal(queryResult[0]?.id, 'track-2');
 
   // Filter by category
   const catResult = filterTracks(list, '', 'zaffat-bride');
   assert.equal(catResult.length, 1);
-  assert.equal(catResult[0].id, 'track-1');
+  assert.equal(catResult[0]?.id, 'track-1');
 
   // Filter by rhythm
   const rhythmResult = filterTracks(list, '', 'all', 'دفوف');
   assert.equal(rhythmResult.length, 1);
-  assert.equal(rhythmResult[0].id, 'track-2');
+  assert.equal(rhythmResult[0]?.id, 'track-2');
 });
 
 test('validateWhatsAppNumber validates international phone numbers', () => {

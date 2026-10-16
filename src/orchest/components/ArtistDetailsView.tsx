@@ -160,9 +160,8 @@ export const ArtistDetailsView: React.FC<ArtistDetailsViewProps> = ({
             <div className="shrink-0 flex flex-col gap-3 w-full sm:w-auto">
               <button
                 onClick={() => {
-                  if (displayTracks.length > 0) {
-                    onOrderTrack(displayTracks[0]);
-                  }
+                  const first = displayTracks[0];
+                  if (first) onOrderTrack(first);
                 }}
                 className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-black font-bold text-sm shadow-xl hover:shadow-[0_0_25px_rgba(212,175,55,0.4)] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -172,9 +171,8 @@ export const ArtistDetailsView: React.FC<ArtistDetailsViewProps> = ({
 
               <button
                 onClick={() => {
-                  if (displayTracks.length > 0) {
-                    onTogglePlay(displayTracks[0]);
-                  }
+                  const first = displayTracks[0];
+                  if (first) onTogglePlay(first);
                 }}
                 className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -259,7 +257,7 @@ export const ArtistDetailsView: React.FC<ArtistDetailsViewProps> = ({
             </p>
             <button
               onClick={() => {
-                if (displayTracks.length > 0) onOrderTrack(displayTracks[0]);
+                if (displayTracks[0]) onOrderTrack(displayTracks[0]);
               }}
               className="mt-4 px-5 py-2.5 rounded-xl bg-[#D4AF37] text-black text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
             >
