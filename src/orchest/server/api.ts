@@ -60,7 +60,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
 }
 
 function getAdminPasswordHash(): string | null {
-  const configured = process.env.ADMIN_PASSWORD_HASH?.trim();
+  const configured = process.env['ADMIN_PASSWORD_HASH']?.trim();
   return configured && configured.startsWith('pbkdf2$') ? configured : null;
 }
 
@@ -81,7 +81,7 @@ function verifyAdminPassword(password: string): boolean {
 }
 
 function setSessionCookie(res: ShimRes, token: string): void {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = process.env['NODE_ENV'] === 'production' ? '; Secure' : '';
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_MS / 1000}${secure}`);
 }
 
@@ -182,14 +182,14 @@ function recordLoginFailure(req: ShimReq): void {
   const current = loginWindows.get(key);
   if (!current || current.resetAt <= now) {
     loginWindows.set(key, { count: 1, resetAt: now + 15 * 60_000 });
-    return;
+    return null;
   }
   current.count += 1;
 }
 
 app.post('/api/auth/login', (req, res) => {
-  if (rejectLoginRateLimited(req, res)) return;
-  const password = parseBoundedText(req.body?.password, 256);
+  if (rejectLoginRateLimited(req, res)) return null;
+  const password = parseBoundedText(req.body?.['password'], 256);
   if (!password || !verifyAdminPassword(password)) {
     recordLoginFailure(req);
     return res.status(401).json({ error: 'بيانات تسجيل الدخول غير صحيحة' });
@@ -339,9 +339,9 @@ function analyzeSemanticIntentFallback(query: string, tracks: CatalogTrack[]) {
 // 1. Semantic Search API Endpoint (البحث الدلالي الذكي)
 app.post('/api/ai/semantic-search', async (req, res) => {
   try {
-    if (rejectRateLimited(req, res)) return;
-    const query = parseBoundedText(req.body?.query, 300);
-    const tracks = parseCatalogTracks(req.body?.tracks);
+    if (rejectRateLimited(req, res)) return null;
+    const query = parseBoundedText(req.body?.['query'], 300);
+    const tracks = parseCatalogTracks(req.body?.['tracks']);
 
     if (!query) {
       return res.json({ matches: [], intentSummary: '' });
@@ -422,7 +422,7 @@ ${JSON.stringify(catalogSummary, null, 2)}`;
     });
   } catch (error: unknown) {
     console.error('Semantic Search Critical Error:', readErrorMessage(error));
-    res.status(500).json({ error: 'تعذر تنفيذ البحث حالياً', matches: [], intentSummary: '' });
+    return res.status(500).json({ error: 'تعذر تنفيذ البحث حالياً', matches: [], intentSummary: '' });
   }
 });
 
@@ -430,13 +430,13 @@ ${JSON.stringify(catalogSummary, null, 2)}`;
 app.post('/api/ai/generate-seo', async (req, res) => {
   try {
     const session = requireAdmin(req, res);
-    if (!session || !requireCsrf(req, res, session)) return;
-    if (rejectRateLimited(req, res)) return;
-    const title = parseBoundedText(req.body?.title, 160);
-    const artist = parseBoundedText(req.body?.artist, 120);
-    const category = parseBoundedText(req.body?.category, 120) || undefined;
-    const rhythm = parseBoundedText(req.body?.rhythm, 80) || undefined;
-    const notes = parseBoundedText(req.body?.notes, 500) || undefined;
+    if (!session || !requireCsrf(req, res, session)) return null;
+    if (rejectRateLimited(req, res)) return null;
+    const title = parseBoundedText(req.body?.['title'], 160);
+    const artist = parseBoundedText(req.body?.['artist'], 120);
+    const category = parseBoundedText(req.body?.['category'], 120) || undefined;
+    const rhythm = parseBoundedText(req.body?.['rhythm'], 80) || undefined;
+    const notes = parseBoundedText(req.body?.['notes'], 500) || undefined;
 
     if (!title || !artist) {
       return res.status(400).json({ error: 'العنوان واسم المنشد مطلوبان' });
@@ -509,16 +509,16 @@ ${notes ? `- ملاحظات إضافية: "${notes}"` : ''}
     });
   } catch (error: unknown) {
     console.error('SEO Generator Error:', readErrorMessage(error));
-    res.status(500).json({ error: 'تعذر توليد الوصف حالياً' });
+    return res.status(500).json({ error: 'تعذر توليد الوصف حالياً' });
   }
 });
 
 // 3. AI Concierge Chatbot for Customers ("اسأل مساعد أوركست")
 app.post('/api/ai/concierge', async (req, res) => {
   try {
-    if (rejectRateLimited(req, res)) return;
-    const message = parseBoundedText(req.body?.message, 500);
-    const tracks = parseCatalogTracks(req.body?.tracks);
+    if (rejectRateLimited(req, res)) return null;
+    const message = parseBoundedText(req.body?.['message'], 500);
+    const tracks = parseCatalogTracks(req.body?.['tracks']);
 
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
@@ -591,7 +591,7 @@ ${JSON.stringify(catalogData, null, 2)}`;
     });
   } catch (error: unknown) {
     console.error('Concierge Error:', readErrorMessage(error));
-    res.status(500).json({ error: 'تعذر تشغيل المساعد حالياً' });
+    return res.status(500).json({ error: 'تعذر تشغيل المساعد حالياً' });
   }
 });
 

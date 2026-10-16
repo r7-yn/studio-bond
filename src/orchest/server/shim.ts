@@ -81,7 +81,7 @@ export const Type = {
 interface GenerateArgs {
   model?: string;
   contents: string;
-  config?: { temperature?: number; responseSchema?: unknown; systemInstruction?: string };
+  config?: { temperature?: number; responseSchema?: unknown; responseMimeType?: string; systemInstruction?: string };
 }
 
 /** Replaces the Gemini SDK with the Lovable AI Gateway; returns null when no key so handlers use their fallbacks. */
@@ -89,7 +89,7 @@ export function createGatewayAiClient() {
   return {
     models: {
       async generateContent({ model, contents, config }: GenerateArgs): Promise<{ text: string }> {
-        const key = process.env.LOVABLE_API_KEY;
+        const key = process.env['LOVABLE_API_KEY'];
         if (!key) throw new Error("LOVABLE_API_KEY missing");
         const schemaNote = config?.responseSchema
           ? `\n\nأجب بصيغة JSON فقط وفق هذا المخطط:\n${JSON.stringify(config.responseSchema)}`
