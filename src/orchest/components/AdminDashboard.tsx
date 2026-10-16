@@ -1,3 +1,4 @@
+import { adminHeaders } from '../utils/adminAuth';
 import { toast } from 'sonner';
 import React, { useState } from 'react';
 import { 
@@ -1093,10 +1094,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const res = await fetch('/api/ai/generate-seo', {
                           method: 'POST',
                           credentials: 'include',
-                          headers: {
+                          headers: adminHeaders({
                             'Content-Type': 'application/json',
                             'X-CSRF-Token': csrfToken,
-                          },
+                          }),
                           body: JSON.stringify({
                             title: newTitle,
                             artist: newArtist,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { adminHeaders, clearAdminToken } from './utils/adminAuth';
 import { 
   INITIAL_TRACKS, 
   INITIAL_CATEGORIES, 
@@ -47,7 +48,12 @@ export default function App() {
   });
 
   // App navigation state
-  const [currentView, setCurrentView] = useState<AppView>('home');
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    try { return sessionStorage.getItem('orchest_view') === 'admin' ? 'admin' : 'home'; } catch { return 'home'; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem('orchest_view', currentView); } catch { /* ignore */ }
+  }, [currentView]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(INITIAL_TRACKS[0] ?? null);
@@ -142,7 +148,7 @@ export default function App() {
 
   const loadAdminSession = async () => {
     try {
-      const response = await fetch('/api/auth/session', { credentials: 'include' });
+      const response = await fetch('/api/auth/session', { credentials: 'include', headers: adminHeaders() });
       const session: unknown = await response.json();
       if (session && typeof session === 'object' && 'authenticated' in session && session.authenticated === true) {
         const csrfToken = 'csrfToken' in session && typeof session.csrfToken === 'string' ? session.csrfToken : null;
@@ -150,6 +156,7 @@ export default function App() {
         setAdminCsrfToken(csrfToken);
         return;
       }
+      clearAdminToken();
     } catch {
       // Treat unavailable sessions as signed out.
     }
@@ -163,6 +170,7 @@ export default function App() {
 
   const handleAdminLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    clearAdminToken();
     setIsAdminAuthenticated(false);
     setAdminCsrfToken(null);
     setCurrentView('home');
