@@ -72,8 +72,8 @@ function verifyAdminPassword(password: string): boolean {
   const iterations = Number(parts[2]);
   if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
   try {
-    const expected = Buffer.from(parts[4], 'base64url');
-    const actual = pbkdf2Sync(password, parts[3], iterations, expected.length, 'sha512');
+    const expected = Buffer.from(parts[4] ?? '', 'base64url');
+    const actual = pbkdf2Sync(password, parts[3] ?? '', iterations, expected.length, 'sha512');
     return expected.length === actual.length && timingSafeEqual(expected, actual);
   } catch {
     return false;
