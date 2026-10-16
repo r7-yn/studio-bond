@@ -124,7 +124,7 @@ function createSessionToken(): string | null {
 }
 
 function getAdminSession(req: ShimReq): AdminSession | null {
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE] || req.header('x-admin-session') || undefined;
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
@@ -235,7 +235,7 @@ app.post('/api/auth/login', (req, res) => {
   const sessionToken = createSessionToken();
   if (!sessionToken) return res.status(503).json({ error: 'لم يتم إعداد كلمة مرور المدير بعد' });
   setSessionCookie(res, sessionToken);
-  return res.json({ authenticated: true });
+  return res.json({ authenticated: true, token: sessionToken });
 });
 
 app.get('/api/auth/session', (req, res) => {

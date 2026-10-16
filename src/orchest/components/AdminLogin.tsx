@@ -1,3 +1,4 @@
+import { saveAdminToken } from '../utils/adminAuth';
 import React, { useState } from 'react';
 import { LockKeyhole, LogIn, X } from 'lucide-react';
 import type { ThemeMode } from '../types/index';
@@ -33,6 +34,8 @@ export function AdminLogin({ theme, onAuthenticated, onCancel }: AdminLoginProps
           : 'تعذر تسجيل الدخول حالياً';
         throw new Error(message);
       }
+      const data: unknown = await response.json().catch(() => null);
+      if (data && typeof data === 'object' && 'token' in data) saveAdminToken(data.token);
       setPassword('');
       onAuthenticated();
     } catch (loginError: unknown) {
