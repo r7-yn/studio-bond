@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React, { useState } from 'react';
 import { 
   Users, 
@@ -49,6 +50,7 @@ interface AdminDashboardProps {
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
+  onReorderCategories: (fromId: string, toId: string) => void;
   theme: ThemeMode;
   csrfToken: string;
   onLogout: () => void;
@@ -67,12 +69,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleTrend,
   onAddCategory,
   onDeleteCategory,
+  onReorderCategories,
   theme,
   csrfToken,
   onLogout,
   onBackToStore,
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'tracks' | 'categories' | 'orders' | 'analytics' | 'settings'>('tracks');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -168,7 +172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) {
-      alert('يرجى إدخال اسم التصنيف');
+      toast.error('يرجى إدخال اسم التصنيف');
       return;
     }
 
@@ -191,7 +195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateTrack = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim()) {
-      alert('يرجى إدخال اسم العمل واسم المنشد');
+      toast.error('يرجى إدخال اسم العمل واسم المنشد');
       return;
     }
 
@@ -560,7 +564,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               return (
                 <div
                   key={cat.id}
-                  className={`group relative rounded-3xl border overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+                  draggable
+                  onDragStart={() => setDraggedCategoryId(cat.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedCategoryId) onReorderCategories(draggedCategoryId, cat.id);
+                    setDraggedCategoryId(null);
+                  }}
+                  onDragEnd={() => setDraggedCategoryId(null)}
+                  title="اسحب لإعادة الترتيب"
+                  className={`${draggedCategoryId === cat.id ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing group relative rounded-3xl border overflow-hidden flex flex-col justify-between transition-all duration-300 ${
                     isDark ? 'bg-[#16161C] border-white/10 hover:border-[#D4AF37]/50' : 'bg-white border-black/10 hover:border-[#B89728]/50 shadow-sm'
                   }`}
                 >

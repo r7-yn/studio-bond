@@ -122,6 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Search className="w-4 h-4" />
               <span className="hidden md:inline text-xs">بحث سريع...</span>
+              <kbd className="hidden lg:inline rounded border border-o-border px-1 text-[10px] font-mono text-o-muted" dir="ltr">⌘K</kbd>
             </button>
 
             {/* Favorites Icon (Hidden on very small mobile since it is in bottom dock) */}

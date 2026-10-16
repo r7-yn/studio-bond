@@ -24,6 +24,8 @@ import { AiConciergeModal } from './components/AiConciergeModal';
 import { ArtistsSection } from './components/ArtistsSection';
 import { ArtistDetailsView } from './components/ArtistDetailsView';
 import { AdminLogin } from './components/AdminLogin';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { 
   Sparkles, 
   MessageCircle, 
@@ -84,6 +86,20 @@ export default function App() {
       localStorage.setItem('orchest_categories', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleReorderCategories = (fromId: string, toId: string) => {
+    setCategories((prev) => {
+      const from = prev.findIndex((c) => c.id === fromId);
+      const to = prev.findIndex((c) => c.id === toId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(from, 1);
+      if (moved) updated.splice(to, 0, moved);
+      localStorage.setItem('orchest_categories', JSON.stringify(updated));
+      return updated;
+    });
+    toast.success('تم تحديث ترتيب التصنيفات');
   };
 
   const handleDeleteCategory = (categoryId: string) => {
@@ -152,6 +168,18 @@ export default function App() {
     setCurrentView('home');
   };
 
+  // Ctrl/⌘K opens instant search from anywhere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Sync theme to localStorage & body class
   useEffect(() => {
     localStorage.setItem('orchest_theme', theme);
@@ -182,6 +210,7 @@ export default function App() {
   };
 
   const toggleFavorite = (trackId: string) => {
+    toast.success(favorites.includes(trackId) ? 'أزيل العمل من المفضلة' : 'أضيف العمل إلى المفضلة');
     setFavorites((prev) =>
       prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId]
     );
@@ -228,6 +257,7 @@ export default function App() {
   };
 
   const handleSubmitOrder = (order: OrderRequest) => {
+    toast.success('تم تجهيز طلبك', { description: 'أكمل التأكيد في محادثة واتساب' });
     setOrders((prev) => [order, ...prev]);
     setKpi((prev) => {
       const newLeads = prev.whatsappLeads + 1;
@@ -285,7 +315,7 @@ export default function App() {
       />
 
       {/* Main Content Router */}
-      <main className="flex-1">
+      <main key={currentView} className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* VIEW 1: HOME PAGE */}
         {currentView === 'home' && (
           <div>
@@ -684,6 +714,7 @@ export default function App() {
               onToggleTrend={handleToggleTrend}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
+              onReorderCategories={handleReorderCategories}
               theme={theme}
               csrfToken={adminCsrfToken}
               onLogout={handleAdminLogout}
@@ -752,6 +783,8 @@ export default function App() {
         theme={theme}
         whatsappNumber={whatsappNumber}
       />
+
+      <Toaster position="top-center" dir="rtl" richColors />
 
       {/* 5. Instant Search Modal */}
       <SearchModal

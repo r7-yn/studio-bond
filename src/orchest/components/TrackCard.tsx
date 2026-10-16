@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React from 'react';
 import { Play, Pause, Heart, Share2, MessageCircle, Eye, ThumbsUp, Sparkles } from 'lucide-react';
 import { Track, ThemeMode } from '../types/index';
@@ -37,7 +38,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
       }).catch(() => {});
     } else {
       navigator.clipboard.writeText(shareUrl);
-      alert('تم نسخ رابط الزفة بنجاح!');
+      toast.success('تم نسخ رابط الزفة');
     }
   };
 
@@ -81,6 +82,19 @@ export const TrackCard: React.FC<TrackCardProps> = ({
             </span>
           ) : null}
         </div>
+
+        {/* Live sound bars while this track plays */}
+        {isPlaying && (
+          <div className="absolute bottom-3 inset-x-0 flex items-end justify-center gap-[3px] h-6 pointer-events-none" aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+              <span
+                key={i}
+                className="w-1 rounded-full bg-o-primary origin-bottom animate-[orchest-bar_0.9s_ease-in-out_infinite]"
+                style={{ height: '100%', animationDelay: `${i * 0.12}s` }}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Center/Quick Play Button */}
         <button

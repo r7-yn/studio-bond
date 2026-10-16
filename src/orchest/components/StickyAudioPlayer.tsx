@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Play, 
   Pause, 
@@ -58,11 +58,44 @@ export const StickyAudioPlayer: React.FC<StickyAudioPlayerProps> = ({
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const isDark = theme === 'dark';
+  const touchStartX = useRef<number | null>(null);
+
+  // Lock-screen / headset controls via the Media Session API
+  useEffect(() => {
+    if (!track || !('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title,
+      artist: track.artist,
+      album: 'استوديو أوركست',
+      artwork: [{ src: track.coverUrl, sizes: '512x512' }],
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', onNext);
+    navigator.mediaSession.setActionHandler('previoustrack', onPrev);
+    return () => {
+      navigator.mediaSession.setActionHandler('nexttrack', null);
+      navigator.mediaSession.setActionHandler('previoustrack', null);
+    };
+  }, [track, onNext, onPrev]);
 
   if (!track) return null;
 
+  // Swipe left/right on the player to skip on phones (RTL: swipe left = next)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartX.current;
+    const end = e.changedTouches[0]?.clientX;
+    touchStartX.current = null;
+    if (start == null || end == null || Math.abs(end - start) < 60) return;
+    if (end < start) onNext();
+    else onPrev();
+  };
+
   return (
     <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       className={`fixed bottom-16 sm:bottom-0 inset-x-0 z-40 transition-all duration-300 border-t backdrop-blur-xl ${
         isDark
           ? 'bg-[#0B0B0E]/95 border-white/10 text-white shadow-[0_-10px_30px_rgba(0,0,0,0.8)]'
