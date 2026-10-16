@@ -89,15 +89,45 @@ function clearSessionCookie(res: ShimRes): void {
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
 }
 
+// Stateless signed sessions: Workers keep no memory between requests, so the cookie
+// itself carries the expiry, signed with a key derived from the server-side password hash.
+// Changing the admin password automatically signs out every existing session.
+function sessionKey(): string | null {
+  const explicit = process.env['ADMIN_SESSION_SECRET']?.trim();
+  if (explicit && explicit.length >= 32) return explicit;
+  const hash = getAdminPasswordHash();
+  return hash ? `orchest-session:${hash}` : null;
+}
+
+function sign(value: string): string | null {
+  const key = sessionKey();
+  return key ? createHmac('sha256', key).update(value).digest('base64url') : null;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+function createSessionToken(): string | null {
+  const payload = `${Date.now() + SESSION_TTL_MS}.${randomBytes(16).toString('base64url')}`;
+  const sig = sign(payload);
+  return sig ? `${payload}.${sig}` : null;
+}
+
 function getAdminSession(req: ShimReq): AdminSession | null {
   const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!token) return null;
-  const session = adminSessions.get(token);
-  if (!session || session.expiresAt <= Date.now()) {
-    if (session) adminSessions.delete(token);
-    return null;
-  }
-  return session;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const payload = `${parts[0]}.${parts[1]}`;
+  const expected = sign(payload);
+  if (!expected || !safeEqual(expected, parts[2] ?? '')) return null;
+  const expiresAt = Number(parts[0]);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  const csrfToken = sign(`csrf:${token}`);
+  return csrfToken ? { csrfToken, expiresAt } : null;
 }
 
 function requireAdmin(req: ShimReq, res: ShimRes): AdminSession | null {
@@ -195,19 +225,8 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'بيانات تسجيل الدخول غير صحيحة' });
   }
 
-  for (const [token, session] of adminSessions) {
-    if (session.expiresAt <= Date.now()) adminSessions.delete(token);
-  }
-  if (adminSessions.size >= 1000) {
-    return res.status(503).json({ error: 'الخدمة مشغولة حالياً. يرجى المحاولة لاحقاً.' });
-  }
-
-  const sessionToken = randomBytes(32).toString('base64url');
-  const session: AdminSession = {
-    csrfToken: randomBytes(32).toString('base64url'),
-    expiresAt: Date.now() + SESSION_TTL_MS,
-  };
-  adminSessions.set(sessionToken, session);
+  const sessionToken = createSessionToken();
+  if (!sessionToken) return res.status(503).json({ error: 'لم يتم إعداد كلمة مرور المدير بعد' });
   setSessionCookie(res, sessionToken);
   return res.json({ authenticated: true });
 });
@@ -218,9 +237,7 @@ app.get('/api/auth/session', (req, res) => {
   return res.json({ authenticated: true, csrfToken: session.csrfToken });
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
-  if (token) adminSessions.delete(token);
+app.post('/api/auth/logout', (_req, res) => {
   clearSessionCookie(res);
   return res.json({ authenticated: false });
 });
