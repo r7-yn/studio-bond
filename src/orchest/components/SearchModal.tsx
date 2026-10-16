@@ -29,6 +29,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [semanticMatches, setSemanticMatches] = useState<SemanticMatch[]>([]);
   const [detectedIntent, setDetectedIntent] = useState<string>('');
+  const [rhythmFilter, setRhythmFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<number | null>(null);
@@ -87,7 +89,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   // Determine display tracks: either semantic matches or traditional filtered tracks
   const standardResults = filterTracks(tracks, query);
 
-  const finalTracks = useSemantic && semanticMatches.length > 0
+  const rhythmOptions = Array.from(new Set(tracks.map((t) => t.rhythm)));
+  const categoryOptions = Array.from(new Map(tracks.map((t) => [t.categoryId, t.categoryLabel])).entries());
+  const matchesFilters = (t: Track) =>
+    (rhythmFilter === 'all' || t.rhythm === rhythmFilter) && (categoryFilter === 'all' || t.categoryId === categoryFilter);
+
+  const unfilteredTracks = useSemantic && semanticMatches.length > 0
     ? semanticMatches
         .map((m) => ({
           track: tracks.find((t) => t.id === m.trackId),
@@ -96,6 +103,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         }))
         .filter((item): item is { track: Track; score: number; reason: string } => Boolean(item.track))
     : standardResults.map((t) => ({ track: t, score: 0, reason: '' }));
+  const finalTracks = unfilteredTracks.filter((item) => matchesFilters(item.track));
+  const chip = (active: boolean) =>
+    `shrink-0 px-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+      active ? 'bg-o-primary border-o-primary text-o-on-primary' : 'border-o-border text-o-muted hover:text-o-text'
+    }`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 sm:pt-20 p-4">
@@ -114,6 +126,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="بحث"
             placeholder="اكتب بالعامية أو الفصحى (مثال: أبي زفة هادية بدون موسيقى للعروس)..."
             className="w-full bg-transparent outline-none text-sm sm:text-base font-medium placeholder-gray-500"
           />
@@ -138,6 +151,22 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           </button>
         </div>
 
+        {/* Quick filters by category and rhythm */}
+        <div className="px-4 py-2 border-b border-o-border space-y-2">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar" role="group" aria-label="التصنيف">
+            <button onClick={() => setCategoryFilter('all')} className={chip(categoryFilter === 'all')}>كل التصنيفات</button>
+            {categoryOptions.map(([id, label]) => (
+              <button key={id} onClick={() => setCategoryFilter(id)} className={chip(categoryFilter === id)}>{label}</button>
+            ))}
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar" role="group" aria-label="الإيقاع">
+            <button onClick={() => setRhythmFilter('all')} className={chip(rhythmFilter === 'all')}>كل الإيقاعات</button>
+            {rhythmOptions.map((r) => (
+              <button key={r} onClick={() => setRhythmFilter(r)} className={chip(rhythmFilter === r)}>{r}</button>
+            ))}
+          </div>
+        </div>
+
         {/* AI Semantic Search Mode Pill */}
         <div className="px-4 py-2 border-b border-white/10 flex items-center justify-between bg-[#D4AF37]/5 text-xs">
           <button
@@ -155,7 +184,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           {isSearchingAI ? (
             <span className="flex items-center gap-1.5 text-[#D4AF37] font-medium">
               <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-ping" />
-              <span>جاري تحليل النية عبر Gemini...</span>
+              <span>جاري تحليل طلبك...</span>
             </span>
           ) : (
             <span className="text-[11px] text-gray-400">يفهم اللهجة والمشاعر بدون تطابق حرفي</span>
