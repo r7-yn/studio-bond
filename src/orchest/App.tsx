@@ -24,6 +24,8 @@ import { AiConciergeModal } from './components/AiConciergeModal';
 import { ArtistsSection } from './components/ArtistsSection';
 import { ArtistDetailsView } from './components/ArtistDetailsView';
 import { AdminLogin } from './components/AdminLogin';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { 
   Sparkles, 
   MessageCircle, 
@@ -151,6 +153,18 @@ export default function App() {
     setAdminCsrfToken(null);
     setCurrentView('home');
   };
+
+  // Ctrl/⌘K opens instant search from anywhere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Sync theme to localStorage & body class
   useEffect(() => {
@@ -285,7 +299,7 @@ export default function App() {
       />
 
       {/* Main Content Router */}
-      <main className="flex-1">
+      <main key={currentView} className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* VIEW 1: HOME PAGE */}
         {currentView === 'home' && (
           <div>
@@ -752,6 +766,8 @@ export default function App() {
         theme={theme}
         whatsappNumber={whatsappNumber}
       />
+
+      <Toaster position="top-center" dir="rtl" richColors />
 
       {/* 5. Instant Search Modal */}
       <SearchModal
