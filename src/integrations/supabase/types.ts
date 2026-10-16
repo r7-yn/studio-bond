@@ -19,18 +19,24 @@ export type Database = {
           created_at: string | null
           event_type: string
           id: number
+          metadata: Json
+          session_id: string | null
           track_id: string | null
         }
         Insert: {
           created_at?: string | null
           event_type: string
           id?: number
+          metadata?: Json
+          session_id?: string | null
           track_id?: string | null
         }
         Update: {
           created_at?: string | null
           event_type?: string
           id?: number
+          metadata?: Json
+          session_id?: string | null
           track_id?: string | null
         }
         Relationships: []
@@ -38,57 +44,84 @@ export type Database = {
       categories: {
         Row: {
           created_at: string | null
+          description: string
           id: string
+          image_url: string | null
           name: string
           slug: string
+          sort_order: number
           track_count: number | null
+          updated_at: string
         }
         Insert: {
           created_at?: string | null
+          description?: string
           id: string
+          image_url?: string | null
           name: string
           slug: string
+          sort_order?: number
           track_count?: number | null
+          updated_at?: string
         }
         Update: {
           created_at?: string | null
+          description?: string
           id?: string
+          image_url?: string | null
           name?: string
           slug?: string
+          sort_order?: number
           track_count?: number | null
+          updated_at?: string
         }
         Relationships: []
       }
       order_logs: {
         Row: {
+          client_names: string
           created_at: string | null
           event_date: string | null
           event_type: string
           id: string
+          modification_type: string
           names: string
           notes: string | null
+          occasion_date: string | null
+          phone: string | null
+          status: string
           track_code: string
           track_id: string | null
           track_title: string
         }
         Insert: {
+          client_names?: string
           created_at?: string | null
           event_date?: string | null
           event_type: string
           id?: string
+          modification_type?: string
           names: string
           notes?: string | null
+          occasion_date?: string | null
+          phone?: string | null
+          status?: string
           track_code: string
           track_id?: string | null
           track_title: string
         }
         Update: {
+          client_names?: string
           created_at?: string | null
           event_date?: string | null
           event_type?: string
           id?: string
+          modification_type?: string
           names?: string
           notes?: string | null
+          occasion_date?: string | null
+          phone?: string | null
+          status?: string
           track_code?: string
           track_id?: string | null
           track_title?: string
@@ -123,48 +156,90 @@ export type Database = {
       }
       tracks: {
         Row: {
+          artist: string
+          audio_frequency: number | null
           audio_url: string
           category_id: string | null
+          code: string
           cover_image: string
+          cover_url: string
           created_at: string | null
+          description: string
           duration: string
+          duration_formatted: string
           duration_sec: number
+          duration_seconds: number
+          execution_days: string
           has_music: boolean | null
           id: string
+          is_exclusive: boolean
           is_featured: boolean | null
+          is_trend: boolean
           likes_count: number | null
+          lyrics: string | null
           plays_count: number | null
+          rhythm: string
+          suitable_for: Json
           title: string
+          updated_at: string
           vocalist: string
         }
         Insert: {
+          artist?: string
+          audio_frequency?: number | null
           audio_url: string
           category_id?: string | null
+          code: string
           cover_image: string
+          cover_url?: string
           created_at?: string | null
+          description?: string
           duration: string
+          duration_formatted?: string
           duration_sec?: number
+          duration_seconds?: number
+          execution_days?: string
           has_music?: boolean | null
           id: string
+          is_exclusive?: boolean
           is_featured?: boolean | null
+          is_trend?: boolean
           likes_count?: number | null
+          lyrics?: string | null
           plays_count?: number | null
+          rhythm?: string
+          suitable_for?: Json
           title: string
+          updated_at?: string
           vocalist: string
         }
         Update: {
+          artist?: string
+          audio_frequency?: number | null
           audio_url?: string
           category_id?: string | null
+          code?: string
           cover_image?: string
+          cover_url?: string
           created_at?: string | null
+          description?: string
           duration?: string
+          duration_formatted?: string
           duration_sec?: number
+          duration_seconds?: number
+          execution_days?: string
           has_music?: boolean | null
           id?: string
+          is_exclusive?: boolean
           is_featured?: boolean | null
+          is_trend?: boolean
           likes_count?: number | null
+          lyrics?: string | null
           plays_count?: number | null
+          rhythm?: string
+          suitable_for?: Json
           title?: string
+          updated_at?: string
           vocalist?: string
         }
         Relationships: [
