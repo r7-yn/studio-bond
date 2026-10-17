@@ -41,6 +41,54 @@ export type Database = {
         }
         Relationships: []
       }
+      artists: {
+        Row: {
+          avatar: string
+          bio: string
+          cover_image: string | null
+          created_at: string
+          genres: Json
+          id: string
+          is_verified: boolean
+          name: string
+          role: string
+          sort_order: number
+          total_streams: number
+          tracks_count: number
+          updated_at: string
+        }
+        Insert: {
+          avatar?: string
+          bio?: string
+          cover_image?: string | null
+          created_at?: string
+          genres?: Json
+          id: string
+          is_verified?: boolean
+          name: string
+          role?: string
+          sort_order?: number
+          total_streams?: number
+          tracks_count?: number
+          updated_at?: string
+        }
+        Update: {
+          avatar?: string
+          bio?: string
+          cover_image?: string | null
+          created_at?: string
+          genres?: Json
+          id?: string
+          is_verified?: boolean
+          name?: string
+          role?: string
+          sort_order?: number
+          total_streams?: number
+          tracks_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string | null
