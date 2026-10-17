@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { adminHeaders, clearAdminToken } from './utils/adminAuth';
 import { 
   INITIAL_TRACKS, 
-  INITIAL_CATEGORIES, 
-  INITIAL_ORDERS, 
   INITIAL_KPI,
-  INITIAL_ARTISTS,
   STUDIO_WHATSAPP_NUMBER 
 } from './data/mockData';
 import { Track, CategoryId, RhythmType, ThemeMode, AppView, OrderRequest, KPIData, Category, Artist } from './types/index';
 import { audioEngine } from './services/audioEngine';
+import { loadCatalog, saveOrder, adminMutate, adminLoadOrders } from './services/catalogDb';
 import { filterTracks, calculateConversionRate, generateWhatsAppUrl } from './utils/trackLogic';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -56,64 +54,81 @@ export default function App() {
   }, [currentView]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
-  const [selectedTrack, setSelectedTrack] = useState<Track | null>(INITIAL_TRACKS[0] ?? null);
-  const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
-  const [categories, setCategories] = useState<Category[]>(() => {
-    try {
-      const saved = localStorage.getItem('orchest_categories');
-      return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
-    } catch {
-      return INITIAL_CATEGORIES;
-    }
-  });
-  const [artists] = useState<Artist[]>(() => {
-    try {
-      const saved = localStorage.getItem('orchest_artists');
-      return saved ? JSON.parse(saved) : INITIAL_ARTISTS;
-    } catch {
-      return INITIAL_ARTISTS;
-    }
-  });
-  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(INITIAL_ARTISTS[0] ?? null);
-  const [orders, setOrders] = useState<OrderRequest[]>(INITIAL_ORDERS);
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
+  const [orders, setOrders] = useState<OrderRequest[]>([]);
   const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
-  const [whatsappNumber, setWhatsappNumber] = useState<string>(() => {
-    return localStorage.getItem('orchest_whatsapp') || STUDIO_WHATSAPP_NUMBER;
-  });
+  const [whatsappNumber, setWhatsappNumber] = useState<string>(STUDIO_WHATSAPP_NUMBER);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  // Load everything from the database (shared by all visitors).
+  const refreshCatalog = async () => {
+    try {
+      const c = await loadCatalog();
+      setTracks(c.tracks);
+      setCategories(c.categories);
+      setArtists(c.artists);
+      if (c.whatsappNumber) setWhatsappNumber(c.whatsappNumber);
+      setSelectedTrack((prev) => prev ?? c.tracks[0] ?? null);
+      setSelectedArtist((prev) => prev ?? c.artists[0] ?? null);
+      setKpi((prev) => ({ ...prev, totalStreams: c.tracks.reduce((n, t) => n + t.playsCount, 0) }));
+      setCatalogError(null);
+    } catch (e) {
+      console.error('Catalog load failed', e);
+      setCatalogError('تعذر تحميل المحتوى حالياً. يرجى تحديث الصفحة.');
+    }
+  };
+  useEffect(() => { void refreshCatalog(); }, []);
+
+  // Admin-only save; on failure show the reason and reload the real data.
+  const persist = async (body: Record<string, unknown>, success?: string) => {
+    if (!adminCsrfToken) { toast.error('يلزم تسجيل دخول المدير'); return; }
+    try {
+      await adminMutate(adminCsrfToken, body);
+      if (success) toast.success(success);
+    } catch (e) {
+      toast.error('لم يتم الحفظ', { description: e instanceof Error ? e.message : undefined });
+      void refreshCatalog();
+    }
+  };
+
+  useEffect(() => {
+    if (!adminCsrfToken) return;
+    adminLoadOrders(adminCsrfToken)
+      .then((list) => {
+        setOrders(list);
+        setKpi((prev) => ({ ...prev, whatsappLeads: list.length, conversionRate: calculateConversionRate(list.length, prev.totalVisits) }));
+      })
+      .catch((e) => console.error('Orders load failed', e));
+  }, [adminCsrfToken]);
 
   const handleUpdateWhatsAppNumber = (newNumber: string) => {
     setWhatsappNumber(newNumber);
-    localStorage.setItem('orchest_whatsapp', newNumber);
+    void persist({ action: 'setSetting', key: 'whatsapp_number', value: newNumber }, 'تم حفظ رقم الواتساب');
   };
 
   const handleAddCategory = (newCategory: Category) => {
-    setCategories((prev) => {
-      const updated = [...prev, newCategory];
-      localStorage.setItem('orchest_categories', JSON.stringify(updated));
-      return updated;
-    });
+    setCategories((prev) => [...prev, newCategory]);
+    void persist({ action: 'addCategory', category: newCategory, sortOrder: categories.length + 1 });
   };
 
   const handleReorderCategories = (fromId: string, toId: string) => {
-    setCategories((prev) => {
-      const from = prev.findIndex((c) => c.id === fromId);
-      const to = prev.findIndex((c) => c.id === toId);
-      if (from < 0 || to < 0 || from === to) return prev;
-      const updated = [...prev];
-      const [moved] = updated.splice(from, 1);
-      if (moved) updated.splice(to, 0, moved);
-      localStorage.setItem('orchest_categories', JSON.stringify(updated));
-      return updated;
-    });
-    toast.success('تم تحديث ترتيب التصنيفات');
+    const from = categories.findIndex((c) => c.id === fromId);
+    const to = categories.findIndex((c) => c.id === toId);
+    if (from < 0 || to < 0 || from === to) return;
+    const updated = [...categories];
+    const [moved] = updated.splice(from, 1);
+    if (moved) updated.splice(to, 0, moved);
+    setCategories(updated);
+    void persist({ action: 'reorderCategories', ids: updated.map((c) => c.id) }, 'تم تحديث ترتيب التصنيفات');
   };
 
   const handleDeleteCategory = (categoryId: string) => {
-    setCategories((prev) => {
-      const updated = prev.filter((c) => c.id !== categoryId);
-      localStorage.setItem('orchest_categories', JSON.stringify(updated));
-      return updated;
-    });
+    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+    void persist({ action: 'deleteCategory', id: categoryId });
   };
 
   const handleSelectArtist = (artist: Artist) => {
@@ -266,6 +281,7 @@ export default function App() {
 
   const handleSubmitOrder = (order: OrderRequest) => {
     toast.success('تم تجهيز طلبك', { description: 'أكمل التأكيد في محادثة واتساب' });
+    saveOrder(order).catch((e) => console.error('Order save failed', e));
     setOrders((prev) => [order, ...prev]);
     setKpi((prev) => {
       const newLeads = prev.whatsappLeads + 1;
@@ -280,16 +296,20 @@ export default function App() {
   // Admin Handlers
   const handleAddTrack = (newTrack: Track) => {
     setTracks((prev) => [newTrack, ...prev]);
+    void persist({ action: 'addTrack', track: newTrack }, 'تم حفظ العمل');
   };
 
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
+    void persist({ action: 'deleteTrack', id });
   };
 
   const handleToggleTrend = (id: string) => {
+    const current = tracks.find((t) => t.id === id);
     setTracks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, isTrend: !t.isTrend } : t))
     );
+    void persist({ action: 'setTrend', id, value: !current?.isTrend });
   };
 
   // Filtered tracks for catalog and search

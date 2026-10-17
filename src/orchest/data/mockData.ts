@@ -392,7 +392,7 @@ export const INITIAL_KPI: KPIData = {
   conversionRate: 3.87,
 };
 
-export const STUDIO_WHATSAPP_NUMBER = '+966500000000';
+export const STUDIO_WHATSAPP_NUMBER = '+967770774107';
 
 export interface PresetImage {
   id: string;

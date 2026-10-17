@@ -621,3 +621,93 @@ ${JSON.stringify(catalogData, null, 2)}`;
 
 
 export { app };
+
+// ===== Admin data writes (persistent). Reads happen in the browser through public read rules;
+// every write here requires a valid admin session + CSRF token and runs with the server-only key.
+async function adminDb() {
+  const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+  return supabaseAdmin;
+}
+
+function str(v: unknown, max = 2000): string {
+  return typeof v === 'string' ? v.slice(0, max) : '';
+}
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+app.post('/api/admin/orders', async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const { data, error } = await db.from('order_logs').select('*').order('created_at', { ascending: false }).limit(500);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ orders: data });
+});
+
+app.post('/api/admin/mutate', async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const b = req.body ?? {};
+  const action = str(b['action'], 50);
+  const db = await adminDb();
+  let error: { message: string } | null = null;
+
+  switch (action) {
+    case 'addTrack': {
+      const t = (b['track'] ?? {}) as Record<string, unknown>;
+      const cover = str(t['coverUrl']);
+      const dur = num(t['duration']);
+      const fmt = str(t['durationFormatted'], 10);
+      const rhythm = str(t['rhythm'], 50);
+      ({ error } = await db.from('tracks').insert({
+        id: str(t['id'], 100), title: str(t['title'], 200), vocalist: str(t['artist'], 200), artist: str(t['artist'], 200),
+        code: str(t['code'], 50), category_id: str(t['categoryId'], 100) || null, duration: fmt, duration_sec: dur,
+        duration_seconds: dur, duration_formatted: fmt, audio_url: str(t['audioUrl']), cover_image: cover, cover_url: cover,
+        rhythm, has_music: rhythm !== 'بدون موسيقى', is_trend: Boolean(t['isTrend']), is_exclusive: Boolean(t['isExclusive']),
+        execution_days: str(t['executionDays'], 50), suitable_for: Array.isArray(t['suitableFor']) ? t['suitableFor'].map((x) => str(x, 100)) : [],
+        description: str(t['description']), audio_frequency: t['audioFreq'] == null ? null : num(t['audioFreq']), lyrics: str(t['lyrics'], 5000) || null,
+      }));
+      break;
+    }
+    case 'deleteTrack':
+      ({ error } = await db.from('tracks').delete().eq('id', str(b['id'], 100)));
+      break;
+    case 'setTrend':
+      ({ error } = await db.from('tracks').update({ is_trend: Boolean(b['value']) }).eq('id', str(b['id'], 100)));
+      break;
+    case 'addCategory': {
+      const c = (b['category'] ?? {}) as Record<string, unknown>;
+      const id = str(c['id'], 100);
+      ({ error } = await db.from('categories').insert({ id, slug: id, name: str(c['name'], 200), description: str(c['description']), image_url: str(c['image']) || null, track_count: num(c['count']), sort_order: num(b['sortOrder']) }));
+      break;
+    }
+    case 'deleteCategory': {
+      const id = str(b['id'], 100);
+      ({ error } = await db.from('tracks').update({ category_id: null }).eq('category_id', id));
+      if (!error) ({ error } = await db.from('categories').delete().eq('id', id));
+      break;
+    }
+    case 'reorderCategories': {
+      const ids = Array.isArray(b['ids']) ? b['ids'].map((x) => str(x, 100)).slice(0, 200) : [];
+      for (let i = 0; i < ids.length && !error; i++) {
+        ({ error } = await db.from('categories').update({ sort_order: i + 1 }).eq('id', ids[i] ?? ''));
+      }
+      break;
+    }
+    case 'setSetting':
+      ({ error } = await db.from('site_settings').upsert({ key: str(b['key'], 100), value: str(b['value'], 500), updated_at: new Date().toISOString() }));
+      break;
+    case 'setOrderStatus': {
+      const status = str(b['status'], 20);
+      if (!['جديد', 'قيد التنفيذ', 'مكتمل'].includes(status)) return res.status(400).json({ error: 'حالة غير صالحة' });
+      ({ error } = await db.from('order_logs').update({ status }).eq('id', str(b['id'], 100)));
+      break;
+    }
+    default:
+      return res.status(400).json({ error: 'عملية غير معروفة' });
+  }
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ ok: true });
+});
