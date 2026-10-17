@@ -74,9 +74,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({
     if (!whatsappUrl) return setError('رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.');
 
     // Open during the click gesture; delayed window.open calls are often blocked.
-    const whatsappWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!whatsappWindow) return setError('تعذر فتح واتساب. يرجى السماح بالنوافذ المنبثقة ثم المحاولة مرة أخرى.');
-    whatsappWindow.location.href = whatsappUrl;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
 
     onSubmitOrder({
       id: `ord-${Date.now()}`,
