@@ -686,7 +686,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="p-4 text-center">
                       <a
-                        href={`https://wa.me/?text=${encodeURIComponent(`مرحباً أستاذ ${ord.clientNames}، بخصوص طلبكم لـ ${ord.trackTitle}`)}`}
+                        href={`https://wa.me/${(ord.phone ?? '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً أستاذ ${ord.clientNames}، بخصوص طلبكم لـ ${ord.trackTitle}`)}`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#25D366]/20 text-[#25D366] hover:bg-[#25D366]/30 text-xs font-bold"
