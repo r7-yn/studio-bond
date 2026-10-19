@@ -121,9 +121,15 @@ interface OrderRow {
   notes: string | null; phone: string | null; created_at: string | null; status: string;
 }
 
-export async function adminLoadOrders(csrf: string): Promise<OrderRequest[]> {
-  const data = (await adminPost('/api/admin/orders', csrf, {})) as { orders?: OrderRow[] };
-  return (data.orders ?? []).map((r) => {
+export function recordVisit(): void {
+  void supabase.from('analytics_events').insert({ event_type: 'visit' }).then(({ error }) => {
+    if (error) console.error('Visit log failed', error.message);
+  });
+}
+
+export async function adminLoadOrders(csrf: string): Promise<{ orders: OrderRequest[]; visits: number }> {
+  const data = (await adminPost('/api/admin/orders', csrf, {})) as { orders?: OrderRow[]; visits?: number };
+  const orders = (data.orders ?? []).map((r) => {
     const o: OrderRequest = {
       id: r.id,
       trackId: r.track_id ?? '',
@@ -139,4 +145,5 @@ export async function adminLoadOrders(csrf: string): Promise<OrderRequest[]> {
     if (r.phone) o.phone = r.phone;
     return o;
   });
+  return { orders, visits: data.visits ?? 0 };
 }
