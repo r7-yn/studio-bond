@@ -52,6 +52,7 @@ interface AdminDashboardProps {
   onAddCategory: (newCategory: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
   onReorderCategories: (fromId: string, toId: string) => void;
+  onUpdateOrderStatus: (id: string, status: OrderRequest['status']) => void;
   theme: ThemeMode;
   csrfToken: string;
   onLogout: () => void;
@@ -71,6 +72,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddCategory,
   onDeleteCategory,
   onReorderCategories,
+  onUpdateOrderStatus,
   theme,
   csrfToken,
   onLogout,
@@ -672,8 +674,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="p-4 text-xs">{ord.modificationType}</td>
                     <td className="p-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      <button
+                        type="button"
+                        onClick={() => onUpdateOrderStatus(ord.id, ord.status === 'جديد' ? 'قيد التنفيذ' : ord.status === 'قيد التنفيذ' ? 'مكتمل' : 'جديد')}
+                        title="اضغط لتغيير الحالة"
+                        aria-label={`تغيير حالة الطلب، الحالة الحالية ${ord.status}`}
+                        className={`cursor-pointer hover:opacity-80 px-2.5 py-1 rounded-full text-[11px] font-bold ${
                           ord.status === 'مكتمل'
                             ? 'bg-blue-500/20 text-blue-400'
                             : ord.status === 'قيد التنفيذ'
@@ -681,8 +687,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             : 'bg-emerald-500/20 text-emerald-400'
                         }`}
                       >
-                        {ord.status}
-                      </span>
+                        {ord.status} ↻
+                      </button>
                     </td>
                     <td className="p-4 text-center">
                       <a

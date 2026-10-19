@@ -7,7 +7,7 @@ import {
 } from './data/mockData';
 import { Track, CategoryId, RhythmType, ThemeMode, AppView, OrderRequest, KPIData, Category, Artist } from './types/index';
 import { audioEngine } from './services/audioEngine';
-import { loadCatalog, saveOrder, adminMutate, adminLoadOrders } from './services/catalogDb';
+import { loadCatalog, saveOrder, adminMutate, adminLoadOrders, recordVisit } from './services/catalogDb';
 import { filterTracks, calculateConversionRate, generateWhatsAppUrl } from './utils/trackLogic';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -98,12 +98,26 @@ export default function App() {
   useEffect(() => {
     if (!adminCsrfToken) return;
     adminLoadOrders(adminCsrfToken)
-      .then((list) => {
+      .then(({ orders: list, visits }) => {
         setOrders(list);
-        setKpi((prev) => ({ ...prev, whatsappLeads: list.length, conversionRate: calculateConversionRate(list.length, prev.totalVisits) }));
+        setKpi((prev) => ({ ...prev, totalVisits: visits, whatsappLeads: list.length, conversionRate: calculateConversionRate(list.length, visits) }));
       })
       .catch((e) => console.error('Orders load failed', e));
   }, [adminCsrfToken]);
+
+  const handleUpdateOrderStatus = (id: string, status: OrderRequest['status']) => {
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    void persist({ action: 'setOrderStatus', id, status }, `تم تغيير الحالة إلى: ${status}`);
+  };
+
+  // Count one visit per browser session.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('orchest_visit')) return;
+      sessionStorage.setItem('orchest_visit', '1');
+    } catch { /* ignore */ }
+    recordVisit();
+  }, []);
 
   const handleUpdateWhatsAppNumber = (newNumber: string) => {
     setWhatsappNumber(newNumber);
@@ -743,6 +757,7 @@ export default function App() {
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
               onReorderCategories={handleReorderCategories}
+              onUpdateOrderStatus={handleUpdateOrderStatus}
               theme={theme}
               csrfToken={adminCsrfToken}
               onLogout={handleAdminLogout}

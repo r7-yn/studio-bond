@@ -643,7 +643,8 @@ app.post('/api/admin/orders', async (req, res) => {
   const db = await adminDb();
   const { data, error } = await db.from('order_logs').select('*').order('created_at', { ascending: false }).limit(500);
   if (error) return res.status(500).json({ error: error.message });
-  return res.json({ orders: data });
+  const visits = await db.from('analytics_events').select('id', { count: 'exact', head: true }).eq('event_type', 'visit');
+  return res.json({ orders: data, visits: visits.count ?? 0 });
 });
 
 app.post('/api/admin/mutate', async (req, res) => {
