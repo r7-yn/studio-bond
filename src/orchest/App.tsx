@@ -1,56 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { adminHeaders, clearAdminToken } from './utils/adminAuth';
-import { 
-  INITIAL_TRACKS, 
-  INITIAL_KPI,
-  STUDIO_WHATSAPP_NUMBER 
-} from './data/mockData';
-import { Track, CategoryId, RhythmType, ThemeMode, AppView, OrderRequest, KPIData, Category, Artist } from './types/index';
-import { audioEngine } from './services/audioEngine';
-import { loadCatalog, saveOrder, adminMutate, adminLoadOrders, recordVisit } from './services/catalogDb';
-import { filterTracks, calculateConversionRate, generateWhatsAppUrl } from './utils/trackLogic';
-import { Header } from './components/Header';
-import { Hero } from './components/Hero';
-import { CategoryGrid } from './components/CategoryGrid';
-import { TrackCard } from './components/TrackCard';
-import { TrackDetailsView } from './components/TrackDetailsView';
-import { StickyAudioPlayer } from './components/StickyAudioPlayer';
-import { OrderModal } from './components/OrderModal';
-import { AdminDashboard } from './components/AdminDashboard';
-import { SearchModal } from './components/SearchModal';
-import { MobileBottomNav } from './components/MobileBottomNav';
-import { AiConciergeModal } from './components/AiConciergeModal';
-import { ArtistsSection } from './components/ArtistsSection';
-import { ArtistDetailsView } from './components/ArtistDetailsView';
-import { AdminLogin } from './components/AdminLogin';
-import { Toaster } from '@/components/ui/sonner';
-import { toast } from 'sonner';
-import { 
-  Sparkles, 
-  MessageCircle, 
-  ShieldCheck, 
-  Headphones, 
-  CheckCircle, 
-  Star, 
+import React, { useState, useEffect } from "react";
+import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
+import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
+import {
+  Track,
+  CategoryId,
+  RhythmType,
+  ThemeMode,
+  AppView,
+  OrderRequest,
+  KPIData,
+  Category,
+  Artist,
+} from "./types/index";
+import { audioEngine } from "./services/audioEngine";
+import {
+  loadCatalog,
+  saveOrder,
+  adminMutate,
+  adminLoadOrders,
+  recordVisit,
+} from "./services/catalogDb";
+import { filterTracks, calculateConversionRate, generateWhatsAppUrl } from "./utils/trackLogic";
+import { Header } from "./components/Header";
+import { Hero } from "./components/Hero";
+import { CategoryGrid } from "./components/CategoryGrid";
+import { TrackCard } from "./components/TrackCard";
+import { TrackDetailsView } from "./components/TrackDetailsView";
+import { StickyAudioPlayer } from "./components/StickyAudioPlayer";
+import { OrderModal } from "./components/OrderModal";
+import { AdminDashboard } from "./components/AdminDashboard";
+import { SearchModal } from "./components/SearchModal";
+import { MobileBottomNav } from "./components/MobileBottomNav";
+import { AiConciergeModal } from "./components/AiConciergeModal";
+import { ArtistsSection } from "./components/ArtistsSection";
+import { ArtistDetailsView } from "./components/ArtistDetailsView";
+import { AdminLogin } from "./components/AdminLogin";
+import { OffersSection } from "./components/OffersSection";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
+import {
+  Sparkles,
+  MessageCircle,
+  ShieldCheck,
+  Headphones,
+  CheckCircle,
+  Star,
   ChevronLeft,
   Music,
   Heart,
-  Bot
-} from 'lucide-react';
+} from "lucide-react";
 
 export default function App() {
   // Theme state with localStorage persistence
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem('orchest_theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'light';
+    const saved = localStorage.getItem("orchest_theme");
+    return saved === "light" || saved === "dark" ? saved : "light";
   });
 
   // App navigation state
   const [currentView, setCurrentView] = useState<AppView>(() => {
-    try { return sessionStorage.getItem('orchest_view') === 'admin' ? 'admin' : 'home'; } catch { return 'home'; }
+    try {
+      return sessionStorage.getItem("orchest_view") === "admin" ? "admin" : "home";
+    } catch {
+      return "home";
+    }
   });
   useEffect(() => {
-    try { sessionStorage.setItem('orchest_view', currentView); } catch { /* ignore */ }
+    try {
+      sessionStorage.setItem("orchest_view", currentView);
+    } catch {
+      /* ignore */
+    }
   }, [currentView]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
@@ -77,20 +97,25 @@ export default function App() {
       setKpi((prev) => ({ ...prev, totalStreams: c.tracks.reduce((n, t) => n + t.playsCount, 0) }));
       setCatalogError(null);
     } catch (e) {
-      console.error('Catalog load failed', e);
-      setCatalogError('تعذر تحميل المحتوى حالياً. يرجى تحديث الصفحة.');
+      console.error("Catalog load failed", e);
+      setCatalogError("تعذر تحميل المحتوى حالياً. يرجى تحديث الصفحة.");
     }
   };
-  useEffect(() => { void refreshCatalog(); }, []);
+  useEffect(() => {
+    void refreshCatalog();
+  }, []);
 
   // Admin-only save; on failure show the reason and reload the real data.
   const persist = async (body: Record<string, unknown>, success?: string) => {
-    if (!adminCsrfToken) { toast.error('يلزم تسجيل دخول المدير'); return; }
+    if (!adminCsrfToken) {
+      toast.error("يلزم تسجيل دخول المدير");
+      return;
+    }
     try {
       await adminMutate(adminCsrfToken, body);
       if (success) toast.success(success);
     } catch (e) {
-      toast.error('لم يتم الحفظ', { description: e instanceof Error ? e.message : undefined });
+      toast.error("لم يتم الحفظ", { description: e instanceof Error ? e.message : undefined });
       void refreshCatalog();
     }
   };
@@ -100,33 +125,47 @@ export default function App() {
     adminLoadOrders(adminCsrfToken)
       .then(({ orders: list, visits }) => {
         setOrders(list);
-        setKpi((prev) => ({ ...prev, totalVisits: visits, whatsappLeads: list.length, conversionRate: calculateConversionRate(list.length, visits) }));
+        setKpi((prev) => ({
+          ...prev,
+          totalVisits: visits,
+          whatsappLeads: list.length,
+          conversionRate: calculateConversionRate(list.length, visits),
+        }));
       })
-      .catch((e) => console.error('Orders load failed', e));
+      .catch((e) => console.error("Orders load failed", e));
   }, [adminCsrfToken]);
 
-  const handleUpdateOrderStatus = (id: string, status: OrderRequest['status']) => {
+  const handleUpdateOrderStatus = (id: string, status: OrderRequest["status"]) => {
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
-    void persist({ action: 'setOrderStatus', id, status }, `تم تغيير الحالة إلى: ${status}`);
+    void persist({ action: "setOrderStatus", id, status }, `تم تغيير الحالة إلى: ${status}`);
   };
 
   // Count one visit per browser session.
   useEffect(() => {
     try {
-      if (sessionStorage.getItem('orchest_visit')) return;
-      sessionStorage.setItem('orchest_visit', '1');
-    } catch { /* ignore */ }
+      if (sessionStorage.getItem("orchest_visit")) return;
+      sessionStorage.setItem("orchest_visit", "1");
+    } catch {
+      /* ignore */
+    }
     recordVisit();
   }, []);
 
   const handleUpdateWhatsAppNumber = (newNumber: string) => {
     setWhatsappNumber(newNumber);
-    void persist({ action: 'setSetting', key: 'whatsapp_number', value: newNumber }, 'تم حفظ رقم الواتساب');
+    void persist(
+      { action: "setSetting", key: "whatsapp_number", value: newNumber },
+      "تم حفظ رقم الواتساب",
+    );
   };
 
   const handleAddCategory = (newCategory: Category) => {
     setCategories((prev) => [...prev, newCategory]);
-    void persist({ action: 'addCategory', category: newCategory, sortOrder: categories.length + 1 });
+    void persist({
+      action: "addCategory",
+      category: newCategory,
+      sortOrder: categories.length + 1,
+    });
   };
 
   const handleReorderCategories = (fromId: string, toId: string) => {
@@ -137,32 +176,35 @@ export default function App() {
     const [moved] = updated.splice(from, 1);
     if (moved) updated.splice(to, 0, moved);
     setCategories(updated);
-    void persist({ action: 'reorderCategories', ids: updated.map((c) => c.id) }, 'تم تحديث ترتيب التصنيفات');
+    void persist(
+      { action: "reorderCategories", ids: updated.map((c) => c.id) },
+      "تم تحديث ترتيب التصنيفات",
+    );
   };
 
   const handleDeleteCategory = (categoryId: string) => {
     setCategories((prev) => prev.filter((c) => c.id !== categoryId));
-    void persist({ action: 'deleteCategory', id: categoryId });
+    void persist({ action: "deleteCategory", id: categoryId });
   };
 
   const handleSelectArtist = (artist: Artist) => {
     setSelectedArtist(artist);
-    setCurrentView('artist-details');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setCurrentView("artist-details");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
-  const [selectedRhythm, setSelectedRhythm] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId>("all");
+  const [selectedRhythm, setSelectedRhythm] = useState<string>("all");
 
   // Favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('orchest_favorites');
-      return saved ? JSON.parse(saved) : ['orc-204', 'orc-305'];
+      const saved = localStorage.getItem("orchest_favorites");
+      return saved ? JSON.parse(saved) : ["orc-204", "orc-305"];
     } catch {
-      return ['orc-204', 'orc-305'];
+      return ["orc-204", "orc-305"];
     }
   });
 
@@ -177,10 +219,21 @@ export default function App() {
 
   const loadAdminSession = async () => {
     try {
-      const response = await fetch('/api/auth/session', { credentials: 'include', headers: adminHeaders() });
+      const response = await fetch("/api/auth/session", {
+        credentials: "include",
+        headers: adminHeaders(),
+      });
       const session: unknown = await response.json();
-      if (session && typeof session === 'object' && 'authenticated' in session && session.authenticated === true) {
-        const csrfToken = 'csrfToken' in session && typeof session.csrfToken === 'string' ? session.csrfToken : null;
+      if (
+        session &&
+        typeof session === "object" &&
+        "authenticated" in session &&
+        session.authenticated === true
+      ) {
+        const csrfToken =
+          "csrfToken" in session && typeof session.csrfToken === "string"
+            ? session.csrfToken
+            : null;
         setIsAdminAuthenticated(Boolean(csrfToken));
         setAdminCsrfToken(csrfToken);
         return;
@@ -198,34 +251,36 @@ export default function App() {
   }, []);
 
   const handleAdminLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
+      () => undefined,
+    );
     clearAdminToken();
     setIsAdminAuthenticated(false);
     setAdminCsrfToken(null);
-    setCurrentView('home');
+    setCurrentView("home");
   };
 
   // Ctrl/⌘K opens instant search from anywhere
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setIsSearchModalOpen(true);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // Sync theme to localStorage & body class
   useEffect(() => {
-    localStorage.setItem('orchest_theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.dataset['theme'] = 'dark';
+    localStorage.setItem("orchest_theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+      document.documentElement.dataset["theme"] = "dark";
     } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.dataset['theme'] = 'light';
+      document.documentElement.classList.remove("dark");
+      document.documentElement.dataset["theme"] = "light";
     }
   }, [theme]);
 
@@ -239,17 +294,17 @@ export default function App() {
 
   // Save favorites to localStorage
   useEffect(() => {
-    localStorage.setItem('orchest_favorites', JSON.stringify(favorites));
+    localStorage.setItem("orchest_favorites", JSON.stringify(favorites));
   }, [favorites]);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
   const toggleFavorite = (trackId: string) => {
-    toast.success(favorites.includes(trackId) ? 'أزيل العمل من المفضلة' : 'أضيف العمل إلى المفضلة');
+    toast.success(favorites.includes(trackId) ? "أزيل العمل من المفضلة" : "أضيف العمل إلى المفضلة");
     setFavorites((prev) =>
-      prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId]
+      prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId],
     );
   };
 
@@ -294,8 +349,8 @@ export default function App() {
   };
 
   const handleSubmitOrder = (order: OrderRequest) => {
-    toast.success('تم تجهيز طلبك', { description: 'أكمل التأكيد في محادثة واتساب' });
-    saveOrder(order).catch((e) => console.error('Order save failed', e));
+    toast.success("تم تجهيز طلبك", { description: "أكمل التأكيد في محادثة واتساب" });
+    saveOrder(order).catch((e) => console.error("Order save failed", e));
     setOrders((prev) => [order, ...prev]);
     setKpi((prev) => {
       const newLeads = prev.whatsappLeads + 1;
@@ -310,20 +365,18 @@ export default function App() {
   // Admin Handlers
   const handleAddTrack = (newTrack: Track) => {
     setTracks((prev) => [newTrack, ...prev]);
-    void persist({ action: 'addTrack', track: newTrack }, 'تم حفظ العمل');
+    void persist({ action: "addTrack", track: newTrack }, "تم حفظ العمل");
   };
 
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
-    void persist({ action: 'deleteTrack', id });
+    void persist({ action: "deleteTrack", id });
   };
 
   const handleToggleTrend = (id: string) => {
     const current = tracks.find((t) => t.id === id);
-    setTracks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, isTrend: !t.isTrend } : t))
-    );
-    void persist({ action: 'setTrend', id, value: !current?.isTrend });
+    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, isTrend: !t.isTrend } : t)));
+    void persist({ action: "setTrend", id, value: !current?.isTrend });
   };
 
   // Filtered tracks for catalog and search
@@ -331,13 +384,13 @@ export default function App() {
   const trendingTracks = tracks.filter((t) => t.isTrend);
   const favoriteTracks = tracks.filter((t) => favorites.includes(t.id));
 
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
 
   return (
     <div
       className={`min-h-screen flex flex-col font-['Alexandria',sans-serif] transition-colors duration-200 ${
-        isDark ? 'bg-[#0B0B0E] text-[#F3F4F6]' : 'bg-[#F9F9FB] text-[#111827]'
-      } pb-28 sm:pb-24`}
+        isDark ? "bg-[#0B0B0E] text-[#F3F4F6]" : "bg-[#F9F9FB] text-[#111827]"
+      } pb-36 sm:pb-24`}
     >
       {/* 1. Header (Sticky) */}
       <Header
@@ -349,17 +402,24 @@ export default function App() {
           if (catId) {
             setSelectedCategory(catId as CategoryId);
           }
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         onOpenSearch={() => setIsSearchModalOpen(true)}
-        onQuickOrder={() => { const t = selectedTrack ?? tracks[0]; if (t) openOrderModalForTrack(t); }}
+        onQuickOrder={() => {
+          const t = selectedTrack ?? tracks[0];
+          if (t) openOrderModalForTrack(t);
+        }}
+        onOpenConcierge={() => setIsAiConciergeOpen(true)}
         favoritesCount={favorites.length}
       />
 
       {/* Main Content Router */}
-      <main key={currentView} className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <main
+        key={currentView}
+        className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-300"
+      >
         {/* VIEW 1: HOME PAGE */}
-        {currentView === 'home' && (
+        {currentView === "home" && (
           <div>
             {/* Hero Section */}
             <Hero
@@ -369,11 +429,11 @@ export default function App() {
               selectedCategory={selectedCategory}
               onSelectCategory={(catId) => {
                 setSelectedCategory(catId);
-                setCurrentView('catalog');
+                setCurrentView("catalog");
               }}
               onExploreClick={() => {
-                const el = document.getElementById('trending-section');
-                el?.scrollIntoView({ behavior: 'smooth' });
+                const el = document.getElementById("trending-section");
+                el?.scrollIntoView({ behavior: "smooth" });
               }}
             />
 
@@ -383,10 +443,17 @@ export default function App() {
               selectedCategory={selectedCategory}
               onSelectCategory={(catId) => {
                 setSelectedCategory(catId);
-                setCurrentView('catalog');
+                setCurrentView("catalog");
               }}
               theme={theme}
-              onViewAll={() => setCurrentView('catalog')}
+              onViewAll={() => setCurrentView("catalog")}
+            />
+
+            <OffersSection
+              theme={theme}
+              onContact={(message) => {
+                window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
+              }}
             />
 
             {/* Trending Tracks Section (الأعمال الرائجة) */}
@@ -399,13 +466,15 @@ export default function App() {
                       الأعمال الرائجة والأكثر طلباً
                     </h2>
                   </div>
-                  <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <p
+                    className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     أحدث الزفات والشيلات المنفذة بأعلى طلب من زبائن استوديو أوركست
                   </p>
                 </div>
 
                 <button
-                  onClick={() => setCurrentView('catalog')}
+                  onClick={() => setCurrentView("catalog")}
                   className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#D4AF37] hover:underline cursor-pointer"
                 >
                   <span>عرض الكل ({tracks.length})</span>
@@ -426,8 +495,8 @@ export default function App() {
                     }}
                     onOpenDetails={() => {
                       setSelectedTrack(track);
-                      setCurrentView('track-details');
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      setCurrentView("track-details");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                     onOrderClick={(e) => {
                       e.stopPropagation();
@@ -450,13 +519,15 @@ export default function App() {
               onSelectArtist={handleSelectArtist}
               theme={theme}
               onViewAll={() => {
-                setCurrentView('artists');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                setCurrentView("artists");
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             />
 
             {/* Studio Features / Value Proposition */}
-            <section className={`py-14 border-y ${isDark ? 'bg-[#16161C]/50 border-white/5' : 'bg-white border-black/5'}`}>
+            <section
+              className={`py-14 border-y ${isDark ? "bg-[#16161C]/50 border-white/5" : "bg-white border-black/5"}`}
+            >
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center max-w-2xl mx-auto mb-10">
                   <span className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider">
@@ -468,33 +539,48 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className={`p-6 rounded-3xl border transition-all ${isDark ? 'bg-[#16161C] border-white/10' : 'bg-[#F9F9FB] border-black/10'}`}>
+                  <div
+                    className={`p-6 rounded-3xl border transition-all ${isDark ? "bg-[#16161C] border-white/10" : "bg-[#F9F9FB] border-black/10"}`}
+                  >
                     <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center mb-4">
                       <Headphones className="w-6 h-6" />
                     </div>
                     <h4 className="font-bold text-lg mb-2">تسجيل استوديو ماسترينغ نقي</h4>
-                    <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      أعلى مستويات النقاء الصوتي (Lossless Studio Quality) المصممة خصيصاً لمكبرات صالات الأفراح وقصور الأفراح لضمان عدم وجود أي تشويش.
+                    <p
+                      className={`text-sm leading-relaxed ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      أعلى مستويات النقاء الصوتي (Lossless Studio Quality) المصممة خصيصاً لمكبرات
+                      صالات الأفراح وقصور الأفراح لضمان عدم وجود أي تشويش.
                     </p>
                   </div>
 
-                  <div className={`p-6 rounded-3xl border transition-all ${isDark ? 'bg-[#16161C] border-white/10' : 'bg-[#F9F9FB] border-black/10'}`}>
+                  <div
+                    className={`p-6 rounded-3xl border transition-all ${isDark ? "bg-[#16161C] border-white/10" : "bg-[#F9F9FB] border-black/10"}`}
+                  >
                     <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center mb-4">
                       <Sparkles className="w-6 h-6" />
                     </div>
                     <h4 className="font-bold text-lg mb-2">تعديل خاص وحصري بالأسماء</h4>
-                    <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      إمكانية إضافة أسماء العروسين وأهلهم، وتعديل الكلمات، وإضافة أبيات شعرية ترحيبية خاصة بأصوات ألمع منشدي الخليج.
+                    <p
+                      className={`text-sm leading-relaxed ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      إمكانية إضافة أسماء العروسين وأهلهم، وتعديل الكلمات، وإضافة أبيات شعرية
+                      ترحيبية خاصة بأصوات ألمع منشدي الخليج.
                     </p>
                   </div>
 
-                  <div className={`p-6 rounded-3xl border transition-all ${isDark ? 'bg-[#16161C] border-white/10' : 'bg-[#F9F9FB] border-black/10'}`}>
+                  <div
+                    className={`p-6 rounded-3xl border transition-all ${isDark ? "bg-[#16161C] border-white/10" : "bg-[#F9F9FB] border-black/10"}`}
+                  >
                     <div className="w-12 h-12 rounded-2xl bg-[#25D366]/15 text-[#25D366] flex items-center justify-center mb-4">
                       <MessageCircle className="w-6 h-6" />
                     </div>
                     <h4 className="font-bold text-lg mb-2">طلب مباشر عبر واتساب الاستوديو</h4>
-                    <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      بضغطة زر واحدة يتم تجهيز كود العمل ورابطه وتفاصيل طلبك، لتتواصل مع مهندس الصوت مباشرة وتبدأ التنفيذ دون تعقيدات.
+                    <p
+                      className={`text-sm leading-relaxed ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      بضغطة زر واحدة يتم تجهيز كود العمل ورابطه وتفاصيل طلبك، لتتواصل مع مهندس الصوت
+                      مباشرة وتبدأ التنفيذ دون تعقيدات.
                     </p>
                   </div>
                 </div>
@@ -504,13 +590,17 @@ export default function App() {
         )}
 
         {/* VIEW 2: FULL CATALOG */}
-        {currentView === 'catalog' && (
+        {currentView === "catalog" && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
             {/* Header with Title & Filter Bar */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">جميع الأعمال الصوتية</h1>
-                <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                  جميع الأعمال الصوتية
+                </h1>
+                <p
+                  className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                >
                   استمع واكتشف أكثر من {tracks.length} عمل صوتي متوفر للطلب الفوري
                 </p>
               </div>
@@ -522,7 +612,9 @@ export default function App() {
                   value={selectedRhythm}
                   onChange={(e) => setSelectedRhythm(e.target.value)}
                   className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border outline-none cursor-pointer ${
-                    isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+                    isDark
+                      ? "bg-[#16161C] border-white/10 text-white"
+                      : "bg-white border-black/10 text-black"
                   }`}
                 >
                   <option value="all">جميع الإيقاعات</option>
@@ -536,13 +628,13 @@ export default function App() {
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 no-scrollbar">
               <button
-                onClick={() => setSelectedCategory('all')}
+                onClick={() => setSelectedCategory("all")}
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap cursor-pointer transition-all ${
-                  selectedCategory === 'all'
-                    ? 'bg-[#D4AF37] text-black shadow-md'
+                  selectedCategory === "all"
+                    ? "bg-[#D4AF37] text-black shadow-md"
                     : isDark
-                    ? 'bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/50'
-                    : 'bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50'
+                      ? "bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/50"
+                      : "bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50"
                 }`}
               >
                 الكل ({tracks.length})
@@ -554,10 +646,10 @@ export default function App() {
                   onClick={() => setSelectedCategory(cat.id)}
                   className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap cursor-pointer transition-all ${
                     selectedCategory === cat.id
-                      ? 'bg-[#D4AF37] text-black shadow-md'
+                      ? "bg-[#D4AF37] text-black shadow-md"
                       : isDark
-                      ? 'bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/50'
-                      : 'bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50'
+                        ? "bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/50"
+                        : "bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50"
                   }`}
                 >
                   {cat.name} ({cat.count})
@@ -573,9 +665,9 @@ export default function App() {
                 <p className="text-xs text-gray-400">جرب تغيير نوع الإيقاع أو مسح البحث</p>
                 <button
                   onClick={() => {
-                    setSelectedCategory('all');
-                    setSelectedRhythm('all');
-                    setSearchQuery('');
+                    setSelectedCategory("all");
+                    setSelectedRhythm("all");
+                    setSearchQuery("");
                   }}
                   className="mt-4 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-semibold text-xs cursor-pointer"
                 >
@@ -595,8 +687,8 @@ export default function App() {
                     }}
                     onOpenDetails={() => {
                       setSelectedTrack(track);
-                      setCurrentView('track-details');
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      setCurrentView("track-details");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                     onOrderClick={(e) => {
                       e.stopPropagation();
@@ -616,13 +708,15 @@ export default function App() {
         )}
 
         {/* VIEW 3: TRACK DETAILS VIEW */}
-        {currentView === 'track-details' && selectedTrack && (
+        {currentView === "track-details" && selectedTrack && (
           <TrackDetailsView
             track={selectedTrack}
             allTracks={tracks}
             isPlaying={audioState.isPlaying && audioState.trackId === selectedTrack.id}
             currentTime={audioState.trackId === selectedTrack.id ? audioState.currentTime : 0}
-            duration={audioState.trackId === selectedTrack.id ? audioState.duration : selectedTrack.duration}
+            duration={
+              audioState.trackId === selectedTrack.id ? audioState.duration : selectedTrack.duration
+            }
             volume={audioState.volume}
             isMuted={audioState.isMuted}
             onTogglePlay={() => handleTogglePlay(selectedTrack)}
@@ -631,7 +725,7 @@ export default function App() {
             onVolumeChange={(vol) => audioEngine.setVolume(vol)}
             onToggleMute={() => audioEngine.toggleMute()}
             onOrderClick={() => openOrderModalForTrack(selectedTrack)}
-            onBack={() => setCurrentView('catalog')}
+            onBack={() => setCurrentView("catalog")}
             onSelectTrack={(t) => {
               setSelectedTrack(t);
               handleTogglePlay(t);
@@ -646,14 +740,16 @@ export default function App() {
         )}
 
         {/* VIEW 4: FAVORITES */}
-        {currentView === 'favorites' && (
+        {currentView === "favorites" && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
             <div className="mb-8">
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
                 <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
                 <span>أعمالك المفضلة</span>
               </h1>
-              <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <p
+                className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
+              >
                 الأعمال التي قمت بحفظها للمقارنة واختيار زفة زفافك أو مناسبتك
               </p>
             </div>
@@ -666,7 +762,7 @@ export default function App() {
                   انقر على أيقونة القلب على أي زفة لحفظها والرجوع إليها لاحقاً
                 </p>
                 <button
-                  onClick={() => setCurrentView('catalog')}
+                  onClick={() => setCurrentView("catalog")}
                   className="mt-4 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-semibold text-xs cursor-pointer"
                 >
                   استعراض الأعمال
@@ -685,8 +781,8 @@ export default function App() {
                     }}
                     onOpenDetails={() => {
                       setSelectedTrack(track);
-                      setCurrentView('track-details');
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      setCurrentView("track-details");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                     onOrderClick={(e) => {
                       e.stopPropagation();
@@ -706,7 +802,7 @@ export default function App() {
         )}
 
         {/* VIEW 5: ARTISTS CATALOG (جميع الفنانين) */}
-        {currentView === 'artists' && (
+        {currentView === "artists" && (
           <div className="py-8 animate-fade-in">
             <ArtistsSection
               artists={artists}
@@ -718,18 +814,18 @@ export default function App() {
         )}
 
         {/* VIEW 6: ARTIST DETAILS VIEW (صفحة أعمال الفنان) */}
-        {currentView === 'artist-details' && selectedArtist && (
+        {currentView === "artist-details" && selectedArtist && (
           <ArtistDetailsView
             artist={selectedArtist}
             tracks={tracks}
             onBack={() => {
-              setCurrentView('artists');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              setCurrentView("artists");
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             onSelectTrack={(t) => {
               setSelectedTrack(t);
-              setCurrentView('track-details');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              setCurrentView("track-details");
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             onTogglePlay={handleTogglePlay}
             onOrderTrack={(t) => openOrderModalForTrack(t)}
@@ -743,8 +839,9 @@ export default function App() {
         )}
 
         {/* VIEW 7: ADMIN DASHBOARD */}
-        {currentView === 'admin' && (isAdminAuthenticated && adminCsrfToken ? (
-          <AdminDashboard
+        {currentView === "admin" &&
+          (isAdminAuthenticated && adminCsrfToken ? (
+            <AdminDashboard
               tracks={tracks}
               orders={orders}
               categories={categories}
@@ -761,17 +858,17 @@ export default function App() {
               theme={theme}
               csrfToken={adminCsrfToken}
               onLogout={handleAdminLogout}
-              onBackToStore={() => setCurrentView('home')}
+              onBackToStore={() => setCurrentView("home")}
             />
-        ) : (
-          <AdminLogin
-            theme={theme}
-            onAuthenticated={() => {
-              void loadAdminSession();
-            }}
-            onCancel={() => setCurrentView('home')}
-          />
-        ))}
+          ) : (
+            <AdminLogin
+              theme={theme}
+              onAuthenticated={() => {
+                void loadAdminSession();
+              }}
+              onCancel={() => setCurrentView("home")}
+            />
+          ))}
       </main>
 
       {/* 2. Persistent Floating Sticky Audio Player */}
@@ -780,7 +877,9 @@ export default function App() {
           track={selectedTrack}
           isPlaying={audioState.isPlaying && audioState.trackId === selectedTrack.id}
           currentTime={audioState.trackId === selectedTrack.id ? audioState.currentTime : 0}
-          duration={audioState.trackId === selectedTrack.id ? audioState.duration : selectedTrack.duration}
+          duration={
+            audioState.trackId === selectedTrack.id ? audioState.duration : selectedTrack.duration
+          }
           volume={audioState.volume}
           isMuted={audioState.isMuted}
           onTogglePlay={() => handleTogglePlay(selectedTrack)}
@@ -791,8 +890,8 @@ export default function App() {
           onVolumeChange={(vol) => audioEngine.setVolume(vol)}
           onToggleMute={() => audioEngine.toggleMute()}
           onOpenDetails={() => {
-            setCurrentView('track-details');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setCurrentView("track-details");
+            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           onOrderClick={() => openOrderModalForTrack(selectedTrack)}
           onClose={() => {
@@ -808,11 +907,17 @@ export default function App() {
         currentView={currentView}
         onNavigate={(view) => {
           setCurrentView(view);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         favoritesCount={favorites.length}
         onWhatsAppContact={() => {
-          window.open(generateWhatsAppUrl(whatsappNumber, 'مرحباً استوديو أوركست، أود الاستفسار عن تفاصيل الزفات والشيلات'), '_blank');
+          window.open(
+            generateWhatsAppUrl(
+              whatsappNumber,
+              "مرحباً استوديو أوركست، أود الاستفسار عن تفاصيل الزفات والشيلات",
+            ),
+            "_blank",
+          );
         }}
         theme={theme}
       />
@@ -836,27 +941,13 @@ export default function App() {
         tracks={tracks}
         onSelectTrack={(t) => {
           setSelectedTrack(t);
-          setCurrentView('track-details');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setCurrentView("track-details");
+          window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         theme={theme}
       />
 
-      {/* 6. AI Concierge Floating Button & Chat Modal ("اسأل مساعد أوركست") */}
-      <div className="fixed bottom-28 sm:bottom-24 left-4 z-40">
-        <button
-          onClick={() => setIsAiConciergeOpen(true)}
-          aria-label="اسأل مساعد أوركست الذكي"
-          className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-black font-bold text-xs sm:text-sm shadow-xl hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] active:scale-95 transition-all duration-300 cursor-pointer border border-white/30 backdrop-blur-md"
-        >
-          <div className="w-7 h-7 rounded-full bg-black/15 flex items-center justify-center shrink-0">
-            <Bot className="w-4 h-4 text-black group-hover:rotate-12 transition-transform" />
-          </div>
-          <span className="hidden sm:inline">مساعد أوركست الذكي 🎵</span>
-          <span className="sm:hidden">اسأل المساعد</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-        </button>
-      </div>
+      {/* 6. AI Concierge chat modal; its entry point lives in the header to avoid bottom collisions. */}
 
       <AiConciergeModal
         isOpen={isAiConciergeOpen}

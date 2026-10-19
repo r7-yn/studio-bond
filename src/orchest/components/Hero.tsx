@@ -1,6 +1,7 @@
-import React from 'react';
-import { Search, Sparkles, Music2, ArrowDown } from 'lucide-react';
-import { ThemeMode, CategoryId } from '../types/index';
+import React from "react";
+import { Search, Sparkles, ArrowDown } from "lucide-react";
+import { ThemeMode, CategoryId } from "../types/index";
+import { getCulturalGreeting, getSeasonalTheme } from "../utils/cultural";
 
 interface HeroProps {
   theme: ThemeMode;
@@ -19,38 +20,47 @@ export const Hero: React.FC<HeroProps> = ({
   onSelectCategory,
   onExploreClick,
 }) => {
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
 
   const categoryPills: { id: CategoryId; label: string }[] = [
-    { id: 'all', label: 'جميع الأعمال' },
-    { id: 'zaffat-bride', label: 'زفات عروس' },
-    { id: 'sheilat-enthusiastic', label: 'شيلات حماسية' },
-    { id: 'welcoming', label: 'ترحيبية' },
-    { id: 'babies', label: 'مواليد' },
+    { id: "all", label: "جميع الأعمال" },
+    { id: "zaffat-bride", label: "زفات عروس" },
+    { id: "sheilat-enthusiastic", label: "شيلات حماسية" },
+    { id: "welcoming", label: "ترحيبية" },
+    { id: "babies", label: "مواليد" },
   ];
 
   return (
     <section className="relative overflow-hidden pt-8 pb-14 sm:pt-16 sm:pb-20">
       {/* Background Decorative Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-[#D4AF37]/10 blur-[130px] rounded-full pointer-events-none -z-10" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[300px] bg-o-primary/10 blur-[80px] rounded-full pointer-events-none -z-10" />
 
       {/* Decorative animated sound wave */}
-      <div className="absolute inset-x-0 top-1/3 -z-10 flex items-center justify-center gap-1.5 h-40 pointer-events-none opacity-60" aria-hidden="true">
-        {Array.from({ length: 48 }, (_, i) => (
+      <div
+        className="absolute inset-x-0 top-1/3 -z-10 flex items-center justify-center gap-1.5 h-40 pointer-events-none opacity-35"
+        aria-hidden="true"
+      >
+        {Array.from({ length: 18 }, (_, i) => (
           <span
             key={i}
-            className="w-1 sm:w-1.5 rounded-full bg-o-primary/40 animate-[orchest-wave_2.4s_ease-in-out_infinite]"
-            style={{ height: `${30 + Math.abs(Math.sin(i * 0.55)) * 70}%`, animationDelay: `${(i % 12) * 0.15}s` }}
+            className="w-1 sm:w-1.5 rounded-full bg-o-primary/40 animate-[orchest-wave_3.2s_ease-in-out_infinite]"
+            style={{
+              height: `${30 + Math.abs(Math.sin(i * 0.55)) * 70}%`,
+              animationDelay: `${(i % 9) * 0.2}s`,
+            }}
           />
         ))}
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
         {/* Subtle pill tag */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 mb-6 backdrop-blur-md">
-          <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-          <span className="text-xs sm:text-sm font-medium text-[#D4AF37]">
-            استوديو أوركست • تنفيذ احترافي وتوزيع خليجي فخم
+        <div className="inline-flex flex-col items-center gap-1 px-4 py-2 rounded-full border border-o-primary/30 bg-o-primary/10 mb-6 backdrop-blur-md">
+          <div className="flex items-center gap-2 text-o-primary">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-xs sm:text-sm font-bold">{getCulturalGreeting().greeting}</span>
+          </div>
+          <span className="text-[10px] sm:text-xs text-o-muted">
+            {getSeasonalTheme().greeting} • {getCulturalGreeting().subtext}
           </span>
         </div>
 
@@ -63,7 +73,9 @@ export const Hero: React.FC<HeroProps> = ({
         </h1>
 
         {/* Subtitle */}
-        <p className={`text-sm sm:text-lg max-w-2xl mx-auto font-medium mb-8 ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+        <p
+          className={`text-sm sm:text-lg max-w-2xl mx-auto font-medium mb-8 ${isDark ? "text-[#9CA3AF]" : "text-[#6B7280]"}`}
+        >
           زفات • شيلات • مقطوعات خاصة • تنفيذ حصري حسب الطلب بالأسماء
         </p>
 
@@ -72,8 +84,8 @@ export const Hero: React.FC<HeroProps> = ({
           <div
             className={`flex items-center gap-3 p-2 rounded-2xl border transition-all duration-300 shadow-xl ${
               isDark
-                ? 'bg-[#16161C] border-white/10 focus-within:border-[#D4AF37]/60 focus-within:shadow-[0_0_25px_rgba(212,175,55,0.25)]'
-                : 'bg-white border-black/10 focus-within:border-[#B89728]/60 focus-within:shadow-[0_4px_25px_rgba(184,151,40,0.2)]'
+                ? "bg-[#16161C] border-white/10 focus-within:border-[#D4AF37]/60 focus-within:shadow-[0_0_25px_rgba(212,175,55,0.25)]"
+                : "bg-white border-black/10 focus-within:border-[#B89728]/60 focus-within:shadow-[0_4px_25px_rgba(184,151,40,0.2)]"
             }`}
           >
             <div className="p-2.5 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37]">
@@ -87,13 +99,13 @@ export const Hero: React.FC<HeroProps> = ({
               placeholder="ابحث عن زفة، منشد، أو كلمة مفتاحية..."
               aria-label="ابحث عن زفة أو منشد"
               className={`w-full bg-transparent text-sm sm:text-base outline-none font-medium ${
-                isDark ? 'text-white placeholder-gray-500' : 'text-black placeholder-gray-400'
+                isDark ? "text-white placeholder-gray-500" : "text-black placeholder-gray-400"
               }`}
             />
 
             {searchQuery && (
               <button
-                onClick={() => onSearchChange('')}
+                onClick={() => onSearchChange("")}
                 className="px-3 py-1 text-xs text-gray-400 hover:text-white"
               >
                 مسح
@@ -112,10 +124,10 @@ export const Hero: React.FC<HeroProps> = ({
                 onClick={() => onSelectCategory(pill.id)}
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                   isSelected
-                    ? 'bg-[#D4AF37] text-black shadow-md shadow-[#D4AF37]/25'
+                    ? "bg-[#D4AF37] text-black shadow-md shadow-[#D4AF37]/25"
                     : isDark
-                    ? 'bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/40'
-                    : 'bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/40 shadow-sm'
+                      ? "bg-[#16161C] border border-white/10 text-gray-300 hover:border-[#D4AF37]/40"
+                      : "bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/40 shadow-sm"
                 }`}
               >
                 {pill.label}
