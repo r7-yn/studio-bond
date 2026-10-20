@@ -1,254 +1,51 @@
-/**
- * Audio Engine for Orchest Studio
- * Provides real Web Audio API sound synthesis (Arabic oud & dufoof rhythm tones)
- * and audio playback with waveform frequency analysis.
- */
+import type { Track } from "../types/index";
 
-class AudioEngine {
-  private ctx: AudioContext | null = null;
-  private isPlaying: boolean = false;
+export interface AudioEngineState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isMuted: boolean;
+  trackId: string | null;
+  error: string | null;
+}
+
+type MediaEventName = keyof HTMLMediaElementEventMap;
+
+/** Plays the audio file attached to a catalog track and mirrors native media state. */
+export class AudioEngine {
+  private player: HTMLAudioElement | null = null;
   private currentTrackId: string | null = null;
-  private currentTime: number = 0;
-  private duration: number = 272;
-  private volume: number = 0.8;
-  private isMuted: boolean = false;
-  private timer: number | null = null;
-  private baseFreq: number = 261.63; // C4
+  private currentAudioUrl: string | null = null;
+  private currentTime = 0;
+  private duration = 0;
+  private fallbackDuration = 0;
+  private volume = 0.8;
+  private isMuted = false;
+  private isPlaying = false;
+  private error: string | null = null;
+  private pendingSeek: number | null = null;
+  private mediaListeners: Array<{ type: MediaEventName; listener: EventListener }> = [];
+  private listeners = new Set<(state: AudioEngineState) => void>();
 
-  // Audio nodes
-  private masterGain: GainNode | null = null;
-  private osc1: OscillatorNode | null = null;
-  private osc2: OscillatorNode | null = null;
-  private rhythmGain: GainNode | null = null;
-  private rhythmOsc: OscillatorNode | null = null;
-  private rhythmInterval: number | null = null;
+  constructor(
+    private readonly createAudio: (src: string) => HTMLAudioElement = (src) => new Audio(src),
+  ) {}
 
-  // Listeners
-  private listeners: Set<(state: {
-    isPlaying: boolean;
-    currentTime: number;
-    duration: number;
-    volume: number;
-    isMuted: boolean;
-    trackId: string | null;
-  }) => void> = new Set();
-
-  private initContext() {
-    if (!this.ctx) {
-      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtxClass();
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  public subscribe(cb: (state: {
-    isPlaying: boolean;
-    currentTime: number;
-    duration: number;
-    volume: number;
-    isMuted: boolean;
-    trackId: string | null;
-  }) => void) {
-    this.listeners.add(cb);
-    this.notify();
+  public subscribe(callback: (state: AudioEngineState) => void) {
+    this.listeners.add(callback);
+    callback(this.getState());
     return () => {
-      this.listeners.delete(cb);
+      this.listeners.delete(callback);
     };
   }
 
   private notify() {
-    const state = {
-      isPlaying: this.isPlaying,
-      currentTime: this.currentTime,
-      duration: this.duration,
-      volume: this.volume,
-      isMuted: this.isMuted,
-      trackId: this.currentTrackId,
-    };
-    this.listeners.forEach((cb) => cb(state));
+    const state = this.getState();
+    this.listeners.forEach((callback) => callback(state));
   }
 
-  public play(trackId: string, durationSec: number = 272, freq: number = 261.63) {
-    this.initContext();
-
-    if (this.currentTrackId !== trackId) {
-      this.stop();
-      this.currentTrackId = trackId;
-      this.duration = durationSec;
-      this.currentTime = 0;
-      this.baseFreq = freq;
-    }
-
-    if (this.isPlaying) return;
-
-    this.isPlaying = true;
-    this.startSynth();
-    this.startTimer();
-    this.notify();
-  }
-
-  public pause() {
-    if (!this.isPlaying) return;
-    this.isPlaying = false;
-    this.stopSynth();
-    this.stopTimer();
-    this.notify();
-  }
-
-  public toggle(trackId: string, durationSec: number = 272, freq: number = 261.63) {
-    if (this.isPlaying && this.currentTrackId === trackId) {
-      this.pause();
-    } else {
-      this.play(trackId, durationSec, freq);
-    }
-  }
-
-  public stop() {
-    this.isPlaying = false;
-    this.stopSynth();
-    this.stopTimer();
-    this.currentTime = 0;
-    this.notify();
-  }
-
-  public seek(seconds: number) {
-    this.currentTime = Math.max(0, Math.min(seconds, this.duration));
-    this.notify();
-  }
-
-  public skip(seconds: number) {
-    this.seek(this.currentTime + seconds);
-  }
-
-  public setVolume(vol: number) {
-    this.volume = Math.max(0, Math.min(vol, 1));
-    if (this.masterGain && this.ctx && !this.isMuted) {
-      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
-    }
-    this.notify();
-  }
-
-  public toggleMute() {
-    this.isMuted = !this.isMuted;
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime);
-    }
-    this.notify();
-  }
-
-  private startTimer() {
-    this.stopTimer();
-    this.timer = window.setInterval(() => {
-      this.currentTime += 0.5;
-      if (this.currentTime >= this.duration) {
-        this.currentTime = 0;
-        this.pause();
-      } else {
-        this.notify();
-      }
-    }, 500);
-  }
-
-  private stopTimer() {
-    if (this.timer !== null) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  /**
-   * Generates warm authentic oriental oud & dufoof pulses via Web Audio API
-   */
-  private startSynth() {
-    if (!this.ctx || !this.masterGain) return;
-
-    try {
-      const now = this.ctx.currentTime;
-
-      // Primary Oud/Chords harmonic oscillator
-      this.osc1 = this.ctx.createOscillator();
-      this.osc1.type = 'triangle';
-      this.osc1.frequency.setValueAtTime(this.baseFreq, now);
-
-      // Secondary warmth harmonic
-      this.osc2 = this.ctx.createOscillator();
-      this.osc2.type = 'sine';
-      this.osc2.frequency.setValueAtTime(this.baseFreq * 1.5, now); // Fifth
-
-      // Subtle vibrato/tremolo LFO for acoustic string warmth
-      const lfo = this.ctx.createOscillator();
-      lfo.frequency.setValueAtTime(5, now);
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.setValueAtTime(3, now);
-      lfo.connect(this.osc1.frequency);
-      lfo.start();
-
-      const synthGain = this.ctx.createGain();
-      synthGain.gain.setValueAtTime(0.15, now);
-
-      this.osc1.connect(synthGain);
-      this.osc2.connect(synthGain);
-      synthGain.connect(this.masterGain);
-
-      this.osc1.start();
-      this.osc2.start();
-
-      // Dufoof rhythmic pulse (frame drum beat) every 600ms
-      this.rhythmInterval = window.setInterval(() => {
-        if (!this.ctx || !this.masterGain || !this.isPlaying) return;
-        try {
-          const drumTime = this.ctx.currentTime;
-          const drumOsc = this.ctx.createOscillator();
-          const drumGain = this.ctx.createGain();
-
-          drumOsc.type = 'triangle';
-          drumOsc.frequency.setValueAtTime(95, drumTime);
-          drumOsc.frequency.exponentialRampToValueAtTime(35, drumTime + 0.18);
-
-          drumGain.gain.setValueAtTime(0.35, drumTime);
-          drumGain.gain.exponentialRampToValueAtTime(0.001, drumTime + 0.25);
-
-          drumOsc.connect(drumGain);
-          drumGain.connect(this.masterGain);
-
-          drumOsc.start(drumTime);
-          drumOsc.stop(drumTime + 0.26);
-        } catch {
-          // ignore transient audio scheduling issues
-        }
-      }, 650);
-    } catch {
-      // Audio fallback handling
-    }
-  }
-
-  private stopSynth() {
-    if (this.rhythmInterval !== null) {
-      clearInterval(this.rhythmInterval);
-      this.rhythmInterval = null;
-    }
-    try {
-      if (this.osc1) {
-        this.osc1.stop();
-        this.osc1.disconnect();
-        this.osc1 = null;
-      }
-      if (this.osc2) {
-        this.osc2.stop();
-        this.osc2.disconnect();
-        this.osc2 = null;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  public getState() {
+  public getState(): AudioEngineState {
     return {
       isPlaying: this.isPlaying,
       currentTime: this.currentTime,
@@ -256,7 +53,208 @@ class AudioEngine {
       volume: this.volume,
       isMuted: this.isMuted,
       trackId: this.currentTrackId,
+      error: this.error,
     };
+  }
+
+  public play(track: Pick<Track, "id" | "audioUrl" | "duration">) {
+    const audioUrl = track.audioUrl?.trim();
+    if (!audioUrl) {
+      this.disposePlayer();
+      this.currentTrackId = track.id;
+      this.currentAudioUrl = null;
+      this.currentTime = 0;
+      this.duration = Math.max(0, track.duration || 0);
+      this.fallbackDuration = this.duration;
+      this.pendingSeek = null;
+      this.isPlaying = false;
+      this.error = "التسجيل غير متاح لهذا العمل حالياً.";
+      this.notify();
+      return;
+    }
+
+    if (this.currentTrackId !== track.id || this.currentAudioUrl !== audioUrl || !this.player) {
+      this.disposePlayer();
+      this.currentTrackId = track.id;
+      this.currentAudioUrl = audioUrl;
+      this.currentTime = 0;
+      this.fallbackDuration = Math.max(0, track.duration || 0);
+      this.duration = this.fallbackDuration;
+      this.pendingSeek = null;
+      this.error = null;
+
+      try {
+        const player = this.createAudio(audioUrl);
+        this.player = player;
+        player.preload = "metadata";
+        player.volume = this.volume;
+        player.muted = this.isMuted;
+        this.attachListeners(player);
+      } catch {
+        this.isPlaying = false;
+        this.error = "تعذر تحميل ملف التسجيل. تحقق من الرابط وحاول مجدداً.";
+        this.notify();
+        return;
+      }
+    }
+
+    const player = this.player;
+    if (!player || this.isPlaying) return;
+
+    this.error = null;
+    try {
+      void player.play().then(
+        () => {
+          if (this.player !== player) return;
+          this.isPlaying = true;
+          this.error = null;
+          this.syncMediaState(player);
+          this.notify();
+        },
+        () => {
+          if (this.player !== player) return;
+          this.isPlaying = false;
+          this.error = "تعذر تشغيل هذا التسجيل. تحقق من الاتصال أو جرّب لاحقاً.";
+          this.notify();
+        },
+      );
+    } catch {
+      this.isPlaying = false;
+      this.error = "تعذر بدء تشغيل التسجيل في هذا المتصفح.";
+      this.notify();
+    }
+    this.notify();
+  }
+
+  private attachListeners(player: HTMLAudioElement) {
+    const add = (type: MediaEventName, callback: () => void) => {
+      const listener: EventListener = () => {
+        if (this.player === player) callback();
+      };
+      player.addEventListener(type, listener);
+      this.mediaListeners.push({ type, listener });
+    };
+
+    const sync = () => {
+      this.syncMediaState(player);
+      this.notify();
+    };
+    add("loadedmetadata", () => {
+      this.syncMediaState(player);
+      if (this.pendingSeek !== null) {
+        const target = this.pendingSeek;
+        this.pendingSeek = null;
+        this.seek(target);
+      } else {
+        this.notify();
+      }
+    });
+    add("durationchange", sync);
+    add("timeupdate", sync);
+    add("play", () => {
+      this.isPlaying = true;
+      this.error = null;
+      this.notify();
+    });
+    add("pause", () => {
+      this.isPlaying = false;
+      this.syncMediaState(player);
+      this.notify();
+    });
+    add("ended", () => {
+      this.isPlaying = false;
+      this.syncMediaState(player);
+      this.currentTime = this.duration;
+      this.notify();
+    });
+    add("error", () => {
+      this.isPlaying = false;
+      this.error = "تعذر تشغيل هذا التسجيل. قد يكون الملف غير متاح أو بصيغة غير مدعومة.";
+      this.notify();
+    });
+  }
+
+  private syncMediaState(player: HTMLAudioElement) {
+    if (Number.isFinite(player.currentTime) && player.currentTime >= 0) {
+      this.currentTime = player.currentTime;
+    }
+    if (Number.isFinite(player.duration) && player.duration > 0) {
+      this.duration = player.duration;
+    } else {
+      this.duration = this.fallbackDuration;
+    }
+  }
+
+  public pause() {
+    if (!this.player) return;
+    this.player.pause();
+    this.isPlaying = false;
+    this.syncMediaState(this.player);
+    this.notify();
+  }
+
+  public toggle(track: Pick<Track, "id" | "audioUrl" | "duration">) {
+    if (this.isPlaying && this.currentTrackId === track.id) this.pause();
+    else this.play(track);
+  }
+
+  public stop() {
+    this.disposePlayer();
+    this.currentTime = 0;
+    this.isPlaying = false;
+    this.error = null;
+    this.pendingSeek = null;
+    this.notify();
+  }
+
+  private disposePlayer() {
+    const player = this.player;
+    if (!player) return;
+    this.mediaListeners.forEach(({ type, listener }) => player.removeEventListener(type, listener));
+    this.mediaListeners = [];
+    this.player = null;
+    player.pause();
+    player.removeAttribute("src");
+    try {
+      player.load();
+    } catch {
+      // Some embedded browsers do not implement load() for detached media elements.
+    }
+    this.isPlaying = false;
+  }
+
+  public seek(seconds: number) {
+    const upperBound =
+      this.player && Number.isFinite(this.player.duration) && this.player.duration > 0
+        ? this.player.duration
+        : this.duration;
+    const target = Math.max(0, Math.min(Number.isFinite(seconds) ? seconds : 0, upperBound));
+    if (this.player) {
+      try {
+        this.player.currentTime = target;
+        this.pendingSeek = null;
+      } catch {
+        this.pendingSeek = target;
+      }
+    }
+    this.currentTime = target;
+    this.notify();
+  }
+
+  public skip(seconds: number) {
+    this.seek(this.currentTime + seconds);
+  }
+
+  public setVolume(volume: number) {
+    this.volume = Math.max(0, Math.min(Number.isFinite(volume) ? volume : this.volume, 1));
+    if (this.player) this.player.volume = this.volume;
+    this.notify();
+  }
+
+  public toggleMute() {
+    this.isMuted = !this.isMuted;
+    if (this.player) this.player.muted = this.isMuted;
+    this.notify();
   }
 }
 

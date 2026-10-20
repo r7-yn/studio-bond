@@ -376,7 +376,7 @@ export default function App() {
       audioEngine.pause();
     } else {
       setSelectedTrack(track);
-      audioEngine.play(track.id, track.duration, track.audioFreq || 261.63);
+      audioEngine.play(track);
       // Increment stream count in KPI
       setKpi((prev) => ({
         ...prev,
@@ -391,7 +391,7 @@ export default function App() {
     const nextTrack = tracks[(currentIndex + 1) % tracks.length];
     if (!nextTrack) return;
     setSelectedTrack(nextTrack);
-    audioEngine.play(nextTrack.id, nextTrack.duration, nextTrack.audioFreq || 261.63);
+    audioEngine.play(nextTrack);
   };
 
   const handlePrevTrack = () => {
@@ -401,7 +401,7 @@ export default function App() {
     const prevTrack = tracks[prevIndex];
     if (!prevTrack) return;
     setSelectedTrack(prevTrack);
-    audioEngine.play(prevTrack.id, prevTrack.duration, prevTrack.audioFreq || 261.63);
+    audioEngine.play(prevTrack);
   };
 
   // Order Handlers
@@ -949,6 +949,7 @@ export default function App() {
           }
           volume={audioState.volume}
           isMuted={audioState.isMuted}
+          error={audioState.trackId === selectedTrack.id ? audioState.error : null}
           onTogglePlay={() => handleTogglePlay(selectedTrack)}
           onSeek={(sec) => audioEngine.seek(sec)}
           onSkip={(sec) => audioEngine.skip(sec)}

@@ -31,6 +31,7 @@ interface StickyAudioPlayerProps {
   onPrev: () => void;
   onVolumeChange: (vol: number) => void;
   onToggleMute: () => void;
+  error: string | null;
   onOpenDetails: () => void;
   onOrderClick: () => void;
   onClose: () => void;
@@ -51,6 +52,7 @@ export const StickyAudioPlayer: React.FC<StickyAudioPlayerProps> = ({
   onPrev,
   onVolumeChange,
   onToggleMute,
+  error,
   onOpenDetails,
   onOrderClick,
   onClose,
@@ -211,6 +213,15 @@ export const StickyAudioPlayer: React.FC<StickyAudioPlayerProps> = ({
             </div>
           </div>
         </div>
+
+        {error && (
+          <p
+            role="alert"
+            className="absolute bottom-full inset-x-0 bg-white/95 px-3 py-1 text-center text-[10px] text-red-600 shadow-sm sm:text-xs"
+          >
+            {error}
+          </p>
+        )}
 
         {/* Right CTA & Audio Settings */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
