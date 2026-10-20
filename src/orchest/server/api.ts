@@ -176,16 +176,31 @@ function getClientIp(req: ShimReq): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
-function isRateLimited(req: ShimReq): boolean {
+function isRateLimited(
+  req: ShimReq,
+  scope = "ai",
+  limit = RATE_LIMIT,
+  windowMs = RATE_WINDOW_MS,
+): boolean {
   const now = Date.now();
-  const key = getClientIp(req);
+  const key = `${scope}:${getClientIp(req)}`;
   const current = requestWindows.get(key);
   if (!current || current.resetAt <= now) {
-    requestWindows.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    requestWindows.set(key, { count: 1, resetAt: now + windowMs });
+    if (requestWindows.size > 10_000) {
+      for (const [oldKey, window] of requestWindows) {
+        if (window.resetAt <= now) requestWindows.delete(oldKey);
+      }
+      while (requestWindows.size > 10_000) {
+        const oldestKey = requestWindows.keys().next().value;
+        if (!oldestKey) break;
+        requestWindows.delete(oldestKey);
+      }
+    }
     return false;
   }
   current.count += 1;
-  return current.count > RATE_LIMIT;
+  return current.count > limit;
 }
 
 function readErrorMessage(error: unknown): string {
@@ -218,8 +233,14 @@ function parseBoundedText(value: unknown, maxLength: number): string | null {
   return text.length > 0 && text.length <= maxLength ? text : null;
 }
 
-function rejectRateLimited(req: ShimReq, res: ShimRes): boolean {
-  if (!isRateLimited(req)) return false;
+function rejectRateLimited(
+  req: ShimReq,
+  res: ShimRes,
+  scope = "ai",
+  limit = RATE_LIMIT,
+  windowMs = RATE_WINDOW_MS,
+): boolean {
+  if (!isRateLimited(req, scope, limit, windowMs)) return false;
   res.status(429).json({ error: "طلبات كثيرة. يرجى المحاولة بعد قليل." });
   return true;
 }
@@ -733,6 +754,155 @@ function isoOrNull(v: unknown, endOfDay = false): string | null {
   if (!value) return null;
   return parseOfferDateBoundary(value, endOfDay)?.toISOString() ?? null;
 }
+
+const allowedOrderTypes = new Set([
+  "تغيير الأسماء فقط",
+  "إضافة مقدمة صوتية وشعر خاص بالأسماء",
+  "تعديل الإيقاع والمؤثرات (دفوف / بدون موسيقى)",
+  "تنفيذ زفة حصرية كاملة من الصفر",
+]);
+
+function isValidOrderDate(value: string): boolean {
+  if (!value) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+async function rejectPersistentPublicRateLimit(
+  req: ShimReq,
+  res: ShimRes,
+  kind: "order" | "event",
+  limit: number,
+  windowSeconds: number,
+): Promise<boolean> {
+  if (rejectRateLimited(req, res, `public-${kind}`, limit, windowSeconds * 1_000)) return true;
+
+  const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  if (!serviceRoleKey) {
+    res.status(503).json({ error: "الخدمة غير متاحة حالياً" });
+    return true;
+  }
+  try {
+    const fingerprint = createHmac("sha256", serviceRoleKey)
+      .update(getClientIp(req))
+      .digest("hex");
+    const db = await adminDb();
+    const { data, error } = await db.rpc("consume_public_request_slot", {
+      p_request_kind: kind,
+      p_ip_fingerprint: fingerprint,
+      p_limit: limit,
+      p_window_seconds: windowSeconds,
+    });
+    if (error?.code === "PGRST202" || error?.code === "42883") {
+      console.warn("Persistent public rate limiter is not installed; using isolate limit");
+      return false;
+    }
+    if (error) throw error;
+    if (data === true) return false;
+    res.status(429).json({ error: "تم تجاوز عدد المحاولات المسموح. يرجى المحاولة لاحقاً." });
+    return true;
+  } catch (error: unknown) {
+    console.error("Public request limiter failed", readErrorMessage(error));
+    res.status(503).json({ error: "تعذر التحقق من الطلب حالياً" });
+    return true;
+  }
+}
+
+app.post("/api/public/orders", async (req, res) => {
+  const body = req.body ?? {};
+  const website = str(body["website"], 200).trim();
+  if (website) return res.status(202).json({ ok: true });
+
+  const requestId = parseBoundedText(body["requestId"], 36);
+  const trackId = parseBoundedText(body["trackId"], 128);
+  const clientNames = parseBoundedText(body["clientNames"], 120);
+  const modificationType = parseBoundedText(body["modificationType"], 100);
+  const occasionDate = str(body["occasionDate"], 10).trim();
+  const notes = str(body["notes"], 501).trim();
+  const phone = str(body["phone"], 33).trim();
+  const formStartedAt = Number(body["formStartedAt"]);
+
+  if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+    return res.status(400).json({ error: "معرّف الطلب غير صالح" });
+  }
+  if (!trackId || !clientNames || !modificationType || !allowedOrderTypes.has(modificationType)) {
+    return res.status(400).json({ error: "بيانات الطلب غير مكتملة أو غير صالحة" });
+  }
+  if (notes.length > 500 || phone.length > 32 || !isValidOrderDate(occasionDate)) {
+    return res.status(400).json({ error: "تحقق من طول الملاحظات أو رقم التواصل أو التاريخ" });
+  }
+  if (phone && (!/^[+\d\s().-]+$/.test(phone) || phone.replace(/\D/g, "").length < 8 || phone.replace(/\D/g, "").length > 15)) {
+    return res.status(400).json({ error: "رقم التواصل غير صالح" });
+  }
+  const elapsedMs = Date.now() - formStartedAt;
+  if (!Number.isSafeInteger(formStartedAt) || elapsedMs < 1_500 || elapsedMs > 2 * 60 * 60_000) {
+    return res.status(400).json({ error: "تعذر التحقق من النموذج. أعد فتحه ثم أرسل الطلب." });
+  }
+  if (await rejectPersistentPublicRateLimit(req, res, "order", 4, 10 * 60)) return null;
+
+  const db = await adminDb();
+  const { data: track, error: trackError } = await db
+    .from("tracks")
+    .select("id,title,code")
+    .eq("id", trackId)
+    .maybeSingle();
+  if (trackError) return res.status(503).json({ error: "تعذر التحقق من العمل المطلوب" });
+  if (!track) return res.status(400).json({ error: "العمل المطلوب غير موجود" });
+
+  const { error } = await db.from("order_logs").insert({
+    id: requestId,
+    track_id: track.id,
+    track_title: track.title,
+    track_code: track.code,
+    names: clientNames,
+    client_names: clientNames,
+    event_type: modificationType,
+    modification_type: modificationType,
+    event_date: occasionDate || null,
+    occasion_date: occasionDate || null,
+    notes: notes || null,
+    phone: phone || null,
+    status: "جديد",
+  });
+  if (error?.code === "23505") return res.json({ ok: true, duplicate: true });
+  if (error) {
+    console.error("Public order insert failed", error.code);
+    return res.status(503).json({ error: "تعذر حفظ الطلب حالياً" });
+  }
+  return res.json({ ok: true });
+});
+
+app.post("/api/public/events", async (req, res) => {
+  const eventType = req.body?.["eventType"];
+  if (eventType !== "visit" && eventType !== "play") {
+    return res.status(400).json({ error: "نوع الحدث غير مسموح" });
+  }
+  const trackId = eventType === "play" ? parseBoundedText(req.body?.["trackId"], 128) : null;
+  if (eventType === "play" && !trackId) return res.status(400).json({ error: "معرّف العمل غير صالح" });
+  if (await rejectPersistentPublicRateLimit(req, res, "event", 90, 60)) return null;
+
+  const db = await adminDb();
+  if (trackId) {
+    const { data: track, error: trackError } = await db
+      .from("tracks")
+      .select("id")
+      .eq("id", trackId)
+      .maybeSingle();
+    if (trackError) return res.status(503).json({ error: "تعذر التحقق من العمل" });
+    if (!track) return res.status(400).json({ error: "العمل غير موجود" });
+  }
+  const { error } = await db.from("analytics_events").insert({
+    event_type: eventType,
+    track_id: trackId,
+  });
+  if (error) {
+    console.error("Public event insert failed", error.code);
+    return res.status(503).json({ error: "تعذر تسجيل الحدث حالياً" });
+  }
+  return res.json({ ok: true });
+});
+
 interface ValidatedOfferData {
   title: string;
   badge: string | null;

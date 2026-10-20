@@ -411,9 +411,11 @@ export default function App() {
     setIsOrderModalOpen(true);
   };
 
-  const handleSubmitOrder = (order: OrderRequest) => {
-    toast.success("تم تجهيز طلبك", { description: "أكمل التأكيد في محادثة واتساب" });
-    saveOrder(order).catch((e) => console.error("Order save failed", e));
+  const handleSubmitOrder = async (
+    order: OrderRequest,
+    guard: { formStartedAt: number; website: string },
+  ) => {
+    await saveOrder(order, guard);
     setOrders((prev) => [order, ...prev]);
     setKpi((prev) => {
       const newLeads = prev.whatsappLeads + 1;
@@ -423,6 +425,7 @@ export default function App() {
         conversionRate: calculateConversionRate(newLeads, prev.totalVisits),
       };
     });
+    toast.success("تم حفظ الطلب", { description: "أكمل التأكيد في محادثة واتساب" });
   };
 
   // Admin Handlers

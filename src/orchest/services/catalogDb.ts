@@ -28,7 +28,7 @@ export async function loadCatalog(): Promise<Catalog> {
     supabase.from("tracks").select("*").order("created_at", { ascending: false }),
     supabase.from("categories").select("*").order("sort_order"),
     supabase.from("artists").select("*").order("sort_order"),
-    supabase.from("site_settings").select("key,value"),
+    supabase.from("site_settings").select("key,value").eq("key", "whatsapp_number"),
     supabase.from("offers_packages").select("*").order("display_order"),
     supabase.from("app_theme_settings").select("*").eq("id", "current_settings").limit(1),
   ]);
@@ -135,21 +135,36 @@ export async function loadCatalog(): Promise<Catalog> {
   return { tracks, categories: catalogCategories, artists, whatsappNumber, offers, themeSettings };
 }
 
-export async function saveOrder(order: OrderRequest): Promise<void> {
-  const { error } = await supabase.from("order_logs").insert({
-    track_id: order.trackId || null,
-    track_title: order.trackTitle,
-    track_code: order.trackCode,
-    names: order.clientNames,
-    client_names: order.clientNames,
-    event_type: order.modificationType,
-    modification_type: order.modificationType,
-    event_date: order.occasionDate || null,
-    occasion_date: order.occasionDate || null,
-    notes: order.notes ?? null,
-    phone: order.phone ?? null,
+export interface OrderSubmissionGuard {
+  formStartedAt: number;
+  website: string;
+}
+
+async function publicPost(path: string, body: Record<string, unknown>): Promise<void> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
-  if (error) throw new Error(error.message);
+  if (response.ok) return;
+  const data: unknown = await response.json().catch(() => null);
+  const message =
+    data && typeof data === "object" && "error" in data ? String(data.error) : "تعذر إرسال الطلب";
+  throw new Error(message);
+}
+
+export async function saveOrder(order: OrderRequest, guard: OrderSubmissionGuard): Promise<void> {
+  await publicPost("/api/public/orders", {
+    requestId: order.id,
+    trackId: order.trackId,
+    clientNames: order.clientNames,
+    modificationType: order.modificationType,
+    occasionDate: order.occasionDate,
+    notes: order.notes ?? "",
+    phone: order.phone ?? "",
+    formStartedAt: guard.formStartedAt,
+    website: guard.website,
+  });
 }
 
 async function adminPost(
@@ -203,22 +218,16 @@ interface OrderRow {
 }
 
 export function recordVisit(): void {
-  void supabase
-    .from("analytics_events")
-    .insert({ event_type: "visit" })
-    .then(({ error }) => {
-      if (error) console.error("Visit log failed", error.message);
-    });
+  void publicPost("/api/public/events", { eventType: "visit" }).catch((error: unknown) => {
+    console.error("Visit log failed", error instanceof Error ? error.message : "unknown error");
+  });
 }
 
 export function recordTrackPlay(trackId: string): void {
   if (!trackId) return;
-  void supabase
-    .from("analytics_events")
-    .insert({ event_type: "play", track_id: trackId })
-    .then(({ error }) => {
-      if (error) console.error("Playback log failed", error.message);
-    });
+  void publicPost("/api/public/events", { eventType: "play", trackId }).catch((error: unknown) => {
+    console.error("Playback log failed", error instanceof Error ? error.message : "unknown error");
+  });
 }
 
 export async function adminLoadOrders(

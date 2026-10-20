@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, MessageCircle, Sparkles, CheckCircle2, ArrowRight, ArrowLeft, Music, Check } from 'lucide-react';
 import { Track, ThemeMode, OrderRequest } from '../types/index';
 import { generateWhatsAppMessage, generateWhatsAppUrl } from '../utils/trackLogic';
@@ -9,7 +9,10 @@ interface OrderModalProps {
   track: Track;
   isOpen: boolean;
   onClose: () => void;
-  onSubmitOrder: (order: OrderRequest) => void;
+  onSubmitOrder: (
+    order: OrderRequest,
+    guard: { formStartedAt: number; website: string },
+  ) => Promise<void>;
   theme: ThemeMode;
   whatsappNumber?: string;
 }
@@ -39,6 +42,19 @@ export const OrderModal: React.FC<OrderModalProps> = ({
   const [phone, setPhone] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [honeypot, setHoneypot] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormStartedAt(Date.now());
+    setRequestId(crypto.randomUUID());
+    setHoneypot('');
+    setIsSubmitting(false);
+    setError(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -55,7 +71,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
     setStep((s) => (Math.max(0, s - 1) as OrderStep));
   };
 
-  const handleSendOrder = () => {
+  const handleSendOrder = async () => {
+    if (isSubmitting) return;
     for (const s of [0, 1] as OrderStep[]) {
       const problem = validateOrderStep(s, form);
       if (problem) {
@@ -75,26 +92,39 @@ export const OrderModal: React.FC<OrderModalProps> = ({
 
     // Open during the click gesture; delayed window.open calls are often blocked.
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-
-    onSubmitOrder({
-      id: `ord-${Date.now()}`,
-      trackId: track.id,
-      trackCode: track.code,
-      trackTitle: track.title,
-      clientNames: clientNames.trim(),
-      modificationType,
-      occasionDate,
-      notes: notes.trim(),
-      ...(phone.trim() ? { phone: phone.trim() } : {}),
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'جديد',
-    });
-    setShowSuccess(true);
-    setTimeout(() => {
-      onClose();
-      setShowSuccess(false);
-      setStep(0);
-    }, 1200);
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmitOrder(
+        {
+          id: requestId,
+          trackId: track.id,
+          trackCode: track.code,
+          trackTitle: track.title,
+          clientNames: clientNames.trim(),
+          modificationType,
+          occasionDate,
+          notes: notes.trim(),
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          status: 'جديد',
+        },
+        { formStartedAt, website: honeypot },
+      );
+      setShowSuccess(true);
+      setTimeout(() => {
+        onClose();
+        setShowSuccess(false);
+        setStep(0);
+        setFormStartedAt(Date.now());
+        setRequestId(crypto.randomUUID());
+        setIsSubmitting(false);
+      }, 1200);
+    } catch (submitError) {
+      console.error('Order submission failed', submitError);
+      setError('تعذر حفظ الطلب حالياً. بقيت محادثة واتساب مفتوحة، ويمكنك المحاولة مجدداً.');
+      setIsSubmitting(false);
+    }
   };
 
   const progress = ((step + 1) / ORDER_STEPS.length) * 100;
@@ -109,6 +139,17 @@ export const OrderModal: React.FC<OrderModalProps> = ({
         aria-label="طلب الزفة باسمك"
         className="relative z-10 w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-o-border bg-o-surface text-o-text shadow-o-elevated animate-in fade-in slide-in-from-bottom-4 duration-300"
       >
+        <div aria-hidden="true" className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden">
+          <label htmlFor="order-website-field">لا تعبئ هذا الحقل</label>
+          <input
+            id="order-website-field"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(event) => setHoneypot(event.target.value)}
+          />
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <div className="flex items-center gap-3">
@@ -310,9 +351,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                   <button
                     type="button"
                     onClick={handleSendOrder}
-                    className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-whatsapp px-5 text-sm font-semibold text-o-on-whatsapp hover:bg-o-whatsapp-hover transition-colors"
+                    disabled={isSubmitting}
+                    className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-whatsapp px-5 text-sm font-semibold text-o-on-whatsapp hover:bg-o-whatsapp-hover transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <MessageCircle className="w-4 h-4" /> تأكيد عبر واتساب
+                    <MessageCircle className="w-4 h-4" /> {isSubmitting ? 'جارٍ حفظ الطلب...' : 'تأكيد عبر واتساب'}
                   </button>
                 )}
               </div>
