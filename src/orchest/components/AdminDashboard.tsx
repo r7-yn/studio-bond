@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   X,
   Settings,
+  Palette,
   Download,
   FileSpreadsheet,
   Database,
@@ -29,7 +30,17 @@ import {
   Layers,
   FolderPlus
 } from 'lucide-react';
-import { Track, OrderRequest, KPIData, ThemeMode, RhythmType, CategoryId, Category } from '../types/index';
+import {
+  Track,
+  OrderRequest,
+  KPIData,
+  ThemeMode,
+  RhythmType,
+  CategoryId,
+  Category,
+  OfferPackage,
+  AppThemeSettings,
+} from "../types/index";
 import { 
   formatCommas, 
   formatNumberK, 
@@ -38,11 +49,14 @@ import {
   exportFullBackupJSON 
 } from '../utils/trackLogic';
 import { ImageUploader } from './ImageUploader';
+import { OffersAdminPanel } from "./OffersAdminPanel";
 
 interface AdminDashboardProps {
   tracks: Track[];
   orders: OrderRequest[];
   categories: Category[];
+  offers: OfferPackage[];
+  themeSettings: AppThemeSettings;
   kpi: KPIData;
   whatsappNumber: string;
   onUpdateWhatsAppNumber: (newNumber: string) => void;
@@ -57,12 +71,15 @@ interface AdminDashboardProps {
   csrfToken: string;
   onLogout: () => void;
   onBackToStore: () => void;
+  onRefreshConfig: () => Promise<void> | void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tracks,
   orders,
   categories,
+  offers,
+  themeSettings,
   kpi,
   whatsappNumber,
   onUpdateWhatsAppNumber,
@@ -77,10 +94,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   csrfToken,
   onLogout,
   onBackToStore,
+  onRefreshConfig,
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'tracks' | 'categories' | 'orders' | 'analytics' | 'settings'>('tracks');
+  const [activeTab, setActiveTab] = useState<
+    "tracks" | "categories" | "offers" | "orders" | "analytics" | "settings"
+  >("tracks");
   const [searchTerm, setSearchTerm] = useState('');
 
   // Settings & WhatsApp State
@@ -397,6 +417,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span>إدارة التصنيفات ({categories.length})</span>
         </button>
         <button
+          onClick={() => setActiveTab("offers")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "offers"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          <Palette className="w-4 h-4" />
+          <span>العروض والثيمات ({offers.length})</span>
+        </button>
+        <button
           onClick={() => setActiveTab('orders')}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeTab === 'orders'
@@ -625,6 +656,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             })}
           </div>
         </div>
+      )}
+
+      {activeTab === "offers" && (
+        <OffersAdminPanel
+          offers={offers}
+          themeSettings={themeSettings}
+          csrfToken={csrfToken}
+          theme={theme}
+          onRefresh={onRefreshConfig}
+        />
       )}
 
       {/* Tab 2: WhatsApp Order Logs matching Screenshot 1 & 3 */}

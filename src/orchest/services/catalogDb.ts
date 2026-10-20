@@ -94,35 +94,36 @@ export async function loadCatalog(): Promise<Catalog> {
     forceThemeOverride: themeRow?.force_theme_override ?? false,
     enableTimeGreetings: themeRow?.enable_time_greetings ?? true,
     enableOffersSection: themeRow?.enable_offers_section ?? true,
-    customGreetingsOverride:
-      themeRow?.custom_greetings_override &&
-      typeof themeRow.custom_greetings_override === "object" &&
-      !Array.isArray(themeRow.custom_greetings_override)
-        ? Object.fromEntries(
+    ...(themeRow?.custom_greetings_override &&
+    typeof themeRow.custom_greetings_override === "object" &&
+    !Array.isArray(themeRow.custom_greetings_override)
+      ? {
+          customGreetingsOverride: Object.fromEntries(
             Object.entries(themeRow.custom_greetings_override).map(([key, value]) => [
               key,
               String(value),
             ]),
-          )
-        : undefined,
+          ),
+        }
+      : {}),
   };
   const offers: OfferPackage[] = (o.data ?? []).map((row) => ({
     id: row.id,
     title: row.title,
-    badge: row.badge ?? undefined,
-    description: row.description ?? undefined,
+    ...(row.badge != null ? { badge: row.badge } : {}),
+    ...(row.description != null ? { description: row.description } : {}),
     type: row.type === "banner_image" ? "banner_image" : "text_card",
-    bannerUrl: row.banner_url ?? undefined,
+    ...(row.banner_url != null ? { bannerUrl: row.banner_url } : {}),
     features: Array.isArray(row.features) ? row.features.map(String) : [],
-    priceOriginal: row.price_original ?? undefined,
-    priceCurrent: row.price_current ?? undefined,
+    ...(row.price_original != null ? { priceOriginal: row.price_original } : {}),
+    ...(row.price_current != null ? { priceCurrent: row.price_current } : {}),
     currency: row.currency,
     ctaText: row.cta_text,
     whatsappMessageTemplate: row.whatsapp_message_template,
     isActive: row.is_active,
     displayOrder: row.display_order,
-    startDate: row.start_date ?? undefined,
-    endDate: row.end_date ?? undefined,
+    ...(row.start_date != null ? { startDate: row.start_date } : {}),
+    ...(row.end_date != null ? { endDate: row.end_date } : {}),
     createdAt: row.created_at,
   }));
   return { tracks, categories, artists, whatsappNumber, offers, themeSettings };

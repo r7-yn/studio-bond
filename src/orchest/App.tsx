@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
 import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
 import {
@@ -11,12 +11,15 @@ import {
   KPIData,
   Category,
   Artist,
+  AppThemeSettings,
+  OfferPackage,
 } from "./types/index";
 import { audioEngine } from "./services/audioEngine";
 import {
   loadCatalog,
   saveOrder,
   adminMutate,
+  adminLoadConfig,
   adminLoadOrders,
   recordVisit,
 } from "./services/catalogDb";
@@ -82,6 +85,14 @@ export default function App() {
   const [orders, setOrders] = useState<OrderRequest[]>([]);
   const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(STUDIO_WHATSAPP_NUMBER);
+  const [offers, setOffers] = useState<OfferPackage[]>([]);
+  const [adminOffers, setAdminOffers] = useState<OfferPackage[]>([]);
+  const [themeSettings, setThemeSettings] = useState<AppThemeSettings>({
+    activeTheme: "default",
+    forceThemeOverride: false,
+    enableTimeGreetings: true,
+    enableOffersSection: true,
+  });
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
   // Load everything from the database (shared by all visitors).
@@ -91,6 +102,8 @@ export default function App() {
       setTracks(c.tracks);
       setCategories(c.categories);
       setArtists(c.artists);
+      setOffers(c.offers);
+      setThemeSettings(c.themeSettings);
       if (c.whatsappNumber) setWhatsappNumber(c.whatsappNumber);
       setSelectedTrack((prev) => prev ?? c.tracks[0] ?? null);
       setSelectedArtist((prev) => prev ?? c.artists[0] ?? null);
@@ -120,6 +133,50 @@ export default function App() {
     }
   };
 
+  const refreshAdminConfig = useCallback(async () => {
+    if (!adminCsrfToken) return;
+    const data = await adminLoadConfig(adminCsrfToken);
+    const mappedOffers: OfferPackage[] = (data.offers ?? []).map((row) => ({
+      id: String(row["id"] ?? ""),
+      title: String(row["title"] ?? ""),
+      ...(row["badge"] != null ? { badge: String(row["badge"]) } : {}),
+      ...(row["description"] != null ? { description: String(row["description"]) } : {}),
+      type: row["type"] === "banner_image" ? "banner_image" : "text_card",
+      ...(row["banner_url"] != null ? { bannerUrl: String(row["banner_url"]) } : {}),
+      features: Array.isArray(row["features"]) ? row["features"].map(String) : [],
+      ...(row["price_original"] != null ? { priceOriginal: Number(row["price_original"]) } : {}),
+      ...(row["price_current"] != null ? { priceCurrent: Number(row["price_current"]) } : {}),
+      currency: String(row["currency"] ?? "ر.س"),
+      ctaText: String(row["cta_text"] ?? "طلب الباقة عبر واتساب"),
+      whatsappMessageTemplate: String(row["whatsapp_message_template"] ?? ""),
+      isActive: row["is_active"] === true,
+      displayOrder: Number(row["display_order"] ?? 0),
+      ...(row["start_date"] != null ? { startDate: String(row["start_date"]) } : {}),
+      ...(row["end_date"] != null ? { endDate: String(row["end_date"]) } : {}),
+      createdAt: String(row["created_at"] ?? ""),
+    }));
+    setAdminOffers(mappedOffers);
+    setOffers(mappedOffers);
+
+    const row = data.theme;
+    if (row) {
+      const customGreetings = row["custom_greetings_override"];
+      const customGreetingsOverride =
+        customGreetings && typeof customGreetings === "object" && !Array.isArray(customGreetings)
+          ? Object.fromEntries(
+              Object.entries(customGreetings).map(([key, value]) => [key, String(value)]),
+            )
+          : null;
+      setThemeSettings({
+        activeTheme: String(row["active_theme"] ?? "default") as AppThemeSettings["activeTheme"],
+        forceThemeOverride: row["force_theme_override"] === true,
+        enableTimeGreetings: row["enable_time_greetings"] !== false,
+        enableOffersSection: row["enable_offers_section"] !== false,
+        ...(customGreetingsOverride ? { customGreetingsOverride } : {}),
+      });
+    }
+  }, [adminCsrfToken]);
+
   useEffect(() => {
     if (!adminCsrfToken) return;
     adminLoadOrders(adminCsrfToken)
@@ -134,6 +191,11 @@ export default function App() {
       })
       .catch((e) => console.error("Orders load failed", e));
   }, [adminCsrfToken]);
+
+  useEffect(() => {
+    if (!adminCsrfToken) return;
+    void refreshAdminConfig().catch((e) => console.error("Admin config load failed", e));
+  }, [adminCsrfToken, refreshAdminConfig]);
 
   const handleUpdateOrderStatus = (id: string, status: OrderRequest["status"]) => {
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
@@ -424,6 +486,7 @@ export default function App() {
             {/* Hero Section */}
             <Hero
               theme={theme}
+              themeSettings={themeSettings}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               selectedCategory={selectedCategory}
@@ -450,7 +513,8 @@ export default function App() {
             />
 
             <OffersSection
-              theme={theme}
+              offers={offers}
+              enabled={themeSettings.enableOffersSection}
               onContact={(message) => {
                 window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
               }}
@@ -845,6 +909,8 @@ export default function App() {
               tracks={tracks}
               orders={orders}
               categories={categories}
+              offers={adminOffers}
+              themeSettings={themeSettings}
               kpi={kpi}
               whatsappNumber={whatsappNumber}
               onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
@@ -859,6 +925,7 @@ export default function App() {
               csrfToken={adminCsrfToken}
               onLogout={handleAdminLogout}
               onBackToStore={() => setCurrentView("home")}
+              onRefreshConfig={refreshAdminConfig}
             />
           ) : (
             <AdminLogin

@@ -2,6 +2,7 @@
 import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from "./shim";
+import { parseOfferDateBoundary } from "../utils/offerLogic";
 
 interface CatalogTrack {
   id: string;
@@ -727,22 +728,49 @@ function jsonStringArray(v: unknown, maxItems = 12, maxLength = 300): string[] {
     .filter(Boolean)
     .slice(0, maxItems);
 }
-function isoOrNull(v: unknown): string | null {
+function isoOrNull(v: unknown, endOfDay = false): string | null {
   const value = str(v, 40).trim();
   if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  return parseOfferDateBoundary(value, endOfDay)?.toISOString() ?? null;
 }
-function validateOfferInput(value: unknown): { data?: Record<string, unknown>; error?: string } {
+interface ValidatedOfferData {
+  title: string;
+  badge: string | null;
+  description: string | null;
+  type: string;
+  banner_url: string | null;
+  features: string[];
+  price_original: number | null;
+  price_current: number | null;
+  currency: string;
+  cta_text: string;
+  whatsapp_message_template: string;
+  is_active: boolean;
+  display_order: number;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+function validateOfferInput(value: unknown): { data?: ValidatedOfferData; error?: string } {
   const offer = (value ?? {}) as Record<string, unknown>;
   const title = str(offer["title"], 255).trim();
   const message = str(offer["whatsappMessageTemplate"], 4000).trim();
   const type = str(offer["type"], 30);
   const startDate = isoOrNull(offer["startDate"]);
-  const endDate = isoOrNull(offer["endDate"]);
+  const endDate = isoOrNull(offer["endDate"], true);
+  const bannerUrl = str(offer["bannerUrl"], 2000).trim();
   if (!title) return { error: "عنوان العرض مطلوب" };
   if (!message) return { error: "رسالة واتساب مطلوبة" };
   if (type !== "text_card" && type !== "banner_image") return { error: "نوع العرض غير صالح" };
+  if (type === "banner_image" && !bannerUrl) return { error: "رابط صورة البانر مطلوب" };
+  if (bannerUrl) {
+    try {
+      if (new URL(bannerUrl).protocol !== "https:")
+        return { error: "يجب أن يستخدم رابط صورة البانر بروتوكول HTTPS" };
+    } catch {
+      return { error: "رابط صورة البانر غير صالح" };
+    }
+  }
   if (offer["startDate"] && !startDate) return { error: "تاريخ البداية غير صالح" };
   if (offer["endDate"] && !endDate) return { error: "تاريخ النهاية غير صالح" };
   if (startDate && endDate && new Date(endDate) < new Date(startDate))
@@ -763,7 +791,7 @@ function validateOfferInput(value: unknown): { data?: Record<string, unknown>; e
       badge: str(offer["badge"], 100).trim() || null,
       description: str(offer["description"], 2000).trim() || null,
       type,
-      banner_url: str(offer["bannerUrl"], 2000).trim() || null,
+      banner_url: bannerUrl || null,
       features: jsonStringArray(offer["features"]),
       price_original: original,
       price_current: current,
@@ -822,9 +850,11 @@ app.post("/api/admin/mutate", async (req, res) => {
         return res.status(400).json({ error: validated.error ?? "بيانات العرض غير صالحة" });
       const offer = (b["offer"] ?? {}) as Record<string, unknown>;
       const id = str(offer["id"], 100).trim();
-      ({ error } = await db
-        .from("offers_packages")
-        .upsert({ ...validated.data, ...(id ? { id } : {}) }));
+      ({ error } = await db.from("offers_packages").upsert({
+        ...validated.data,
+        updated_at: new Date().toISOString(),
+        ...(id ? { id } : {}),
+      }));
       break;
     }
     case "deleteOffer":
@@ -852,16 +882,20 @@ app.post("/api/admin/mutate", async (req, res) => {
       const allowedThemes = ["default", "ramadan", "eid", "national_day", "wedding_season"];
       if (!allowedThemes.includes(activeTheme))
         return res.status(400).json({ error: "الثيم غير صالح" });
+      const customGreetings = theme["customGreetingsOverride"];
+      const customGreetingsOverride: Record<string, string> | null =
+        customGreetings && typeof customGreetings === "object" && !Array.isArray(customGreetings)
+          ? Object.fromEntries(
+              Object.entries(customGreetings).map(([key, value]) => [key, str(value, 200)]),
+            )
+          : null;
       ({ error } = await db.from("app_theme_settings").upsert({
         id: "current_settings",
         active_theme: activeTheme,
         force_theme_override: bool(theme["forceThemeOverride"]),
         enable_time_greetings: bool(theme["enableTimeGreetings"]),
         enable_offers_section: bool(theme["enableOffersSection"]),
-        custom_greetings_override:
-          typeof theme["customGreetingsOverride"] === "object"
-            ? theme["customGreetingsOverride"]
-            : null,
+        custom_greetings_override: customGreetingsOverride,
         updated_at: new Date().toISOString(),
       }));
       break;

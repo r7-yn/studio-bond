@@ -33,7 +33,51 @@ export function getCulturalGreeting(date: Date = new Date()): CulturalGreeting {
   };
 }
 
-export function getSeasonalTheme(date: Date = new Date()): SeasonalTheme {
+export function getSeasonalTheme(
+  date: Date = new Date(),
+  forcedTheme?: SeasonalThemeKey,
+): SeasonalTheme {
+  if (forcedTheme) {
+    const themes: Record<SeasonalThemeKey, SeasonalTheme> = {
+      default: {
+        key: "default",
+        label: "الهوية الملكية",
+        greeting: "تفاصيل صغيرة، أثر كبير",
+        subtext: "زفات وشيلات مصممة حول مناسبتكم",
+        icon: "sparkles",
+      },
+      ramadan: {
+        key: "ramadan",
+        label: "نفحات رمضانية",
+        greeting: "رمضان مبارك، وأفراحكم عامرة",
+        subtext: "اختيارات صوتية تليق بأمسياتكم الرمضانية",
+        icon: "moon",
+      },
+      eid: {
+        key: "eid",
+        label: "عرض العيد",
+        greeting: "عيدكم مبارك وأيامكم عامرة بالأفراح",
+        subtext: "اختيارات احتفالية لمناسباتكم العائلية",
+        icon: "sparkles",
+      },
+      national_day: {
+        key: "national_day",
+        label: "احتفالات الوطن",
+        greeting: "دام عزك يا وطن",
+        subtext: "شيلات وطنية تليق بمناسباتكم الكبرى",
+        icon: "flag",
+      },
+      wedding_season: {
+        key: "wedding_season",
+        label: "موسم الزفات الكبرى",
+        greeting: "ليلتكم تستحق بصمة لا تتكرر",
+        subtext: "اكتشفوا اختياراتنا الفاخرة لموسم الأعراس",
+        icon: "crown",
+      },
+    };
+    return themes[forcedTheme] ?? themes.default;
+  }
+
   const month = date.getMonth() + 1;
   const day = date.getDate();
 

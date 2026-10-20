@@ -1,10 +1,11 @@
 import React from "react";
-import { Search, Sparkles, ArrowDown } from "lucide-react";
-import { ThemeMode, CategoryId } from "../types/index";
+import { Search, Sparkles, ArrowDown, Moon, Crown, Heart, Flag } from "lucide-react";
+import { AppThemeSettings, ThemeMode, CategoryId } from "../types/index";
 import { getCulturalGreeting, getSeasonalTheme } from "../utils/cultural";
 
 interface HeroProps {
   theme: ThemeMode;
+  themeSettings: AppThemeSettings;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   selectedCategory: CategoryId;
@@ -14,6 +15,7 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({
   theme,
+  themeSettings,
   searchQuery,
   onSearchChange,
   selectedCategory,
@@ -21,6 +23,18 @@ export const Hero: React.FC<HeroProps> = ({
   onExploreClick,
 }) => {
   const isDark = theme === "dark";
+  const culturalGreeting = getCulturalGreeting();
+  const seasonalTheme = getSeasonalTheme(
+    new Date(),
+    themeSettings.forceThemeOverride ? themeSettings.activeTheme : undefined,
+  );
+  const SeasonalIcon = {
+    moon: Moon,
+    sparkles: Sparkles,
+    crown: Crown,
+    heart: Heart,
+    flag: Flag,
+  }[seasonalTheme.icon];
 
   const categoryPills: { id: CategoryId; label: string }[] = [
     { id: "all", label: "جميع الأعمال" },
@@ -56,11 +70,14 @@ export const Hero: React.FC<HeroProps> = ({
         {/* Subtle pill tag */}
         <div className="inline-flex flex-col items-center gap-1 px-4 py-2 rounded-full border border-o-primary/30 bg-o-primary/10 mb-6 backdrop-blur-md">
           <div className="flex items-center gap-2 text-o-primary">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-xs sm:text-sm font-bold">{getCulturalGreeting().greeting}</span>
+            <SeasonalIcon className="w-4 h-4" aria-hidden="true" />
+            <span className="text-xs sm:text-sm font-bold">
+              {themeSettings.enableTimeGreetings ? culturalGreeting.greeting : seasonalTheme.label}
+            </span>
           </div>
           <span className="text-[10px] sm:text-xs text-o-muted">
-            {getSeasonalTheme().greeting} • {getCulturalGreeting().subtext}
+            {seasonalTheme.greeting} •{" "}
+            {themeSettings.enableTimeGreetings ? culturalGreeting.subtext : seasonalTheme.subtext}
           </span>
         </div>
 
