@@ -1,4 +1,4 @@
-export type RhythmType = 'بدون موسيقى' | 'دفوف' | 'أوركسترا';
+export type RhythmType = "بدون موسيقى" | "دفوف" | "أوركسترا";
 
 export type CategoryId = string;
 
@@ -47,6 +47,37 @@ export interface Artist {
   tracksCount?: number;
 }
 
+export type OfferType = "text_card" | "banner_image";
+export type SeasonalThemeKey = "default" | "ramadan" | "eid" | "national_day" | "wedding_season";
+
+export interface OfferPackage {
+  id: string;
+  title: string;
+  badge?: string;
+  description?: string;
+  type: OfferType;
+  bannerUrl?: string;
+  features: string[];
+  priceOriginal?: number;
+  priceCurrent?: number;
+  currency: string;
+  ctaText: string;
+  whatsappMessageTemplate: string;
+  isActive: boolean;
+  displayOrder: number;
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+}
+
+export interface AppThemeSettings {
+  activeTheme: SeasonalThemeKey;
+  forceThemeOverride: boolean;
+  enableTimeGreetings: boolean;
+  enableOffersSection: boolean;
+  customGreetingsOverride?: Record<string, string>;
+}
+
 export interface OrderRequest {
   id: string;
   trackId: string;
@@ -58,7 +89,7 @@ export interface OrderRequest {
   notes?: string;
   phone?: string;
   timestamp: string;
-  status: 'جديد' | 'قيد التنفيذ' | 'مكتمل';
+  status: "جديد" | "قيد التنفيذ" | "مكتمل";
 }
 
 export interface KPIData {
@@ -68,7 +99,7 @@ export interface KPIData {
   conversionRate: number;
 }
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = "dark" | "light";
 
-export type AppView = 'home' | 'catalog' | 'track-details' | 'admin' | 'favorites' | 'artists' | 'artist-details';
-
+export type AppView =
+  "home" | "catalog" | "track-details" | "admin" | "favorites" | "artists" | "artist-details";

@@ -1,7 +1,7 @@
 // Ported from the original Express server.ts; handlers run on the Worker through a small req/res shim.
-import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
-import { Buffer } from 'node:buffer';
-import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from './shim';
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from "./shim";
 
 interface CatalogTrack {
   id: string;
@@ -42,45 +42,50 @@ interface AdminSession {
 }
 
 const adminSessions = new Map<string, AdminSession>();
-const SESSION_COOKIE = 'orchest_admin_session';
+const SESSION_COOKIE = "orchest_admin_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 210_000;
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
-  return Object.fromEntries(header.split(';').flatMap((part) => {
-    const separator = part.indexOf('=');
-    if (separator < 0) return [];
-    try {
-      return [[part.slice(0, separator).trim(), decodeURIComponent(part.slice(separator + 1).trim())]];
-    } catch {
-      return [];
-    }
-  }));
+  return Object.fromEntries(
+    header.split(";").flatMap((part) => {
+      const separator = part.indexOf("=");
+      if (separator < 0) return [];
+      try {
+        return [
+          [part.slice(0, separator).trim(), decodeURIComponent(part.slice(separator + 1).trim())],
+        ];
+      } catch {
+        return [];
+      }
+    }),
+  );
 }
 
 function getAdminPasswordHash(): string | null {
-  const configured = process.env['ADMIN_PASSWORD_HASH']?.trim();
-  return configured && configured.startsWith('pbkdf2$') ? configured : null;
+  const configured = process.env["ADMIN_PASSWORD_HASH"]?.trim();
+  return configured && configured.startsWith("pbkdf2$") ? configured : null;
 }
 
 function verifyAdminPassword(password: string): boolean {
   const configured = getAdminPasswordHash();
   if (!configured) {
     // Fallback: plain ADMIN_PASSWORD stored as a server-only secret, compared in constant time.
-    const plain = process.env['ADMIN_PASSWORD'];
+    const plain = process.env["ADMIN_PASSWORD"];
     if (!plain || plain.length < 8) return false;
-    const a = createHmac('sha256', 'cmp').update(password).digest();
-    const b = createHmac('sha256', 'cmp').update(plain).digest();
+    const a = createHmac("sha256", "cmp").update(password).digest();
+    const b = createHmac("sha256", "cmp").update(plain).digest();
     return timingSafeEqual(a, b);
   }
-  const parts = configured.split('$');
-  if (parts.length !== 5 || parts[1] !== 'sha512') return false;
+  const parts = configured.split("$");
+  if (parts.length !== 5 || parts[1] !== "sha512") return false;
   const iterations = Number(parts[2]);
-  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000)
+    return false;
   try {
-    const expected = Buffer.from(parts[4] ?? '', 'base64url');
-    const actual = pbkdf2Sync(password, parts[3] ?? '', iterations, expected.length, 'sha512');
+    const expected = Buffer.from(parts[4] ?? "", "base64url");
+    const actual = pbkdf2Sync(password, parts[3] ?? "", iterations, expected.length, "sha512");
     return expected.length === actual.length && timingSafeEqual(expected, actual);
   } catch {
     return false;
@@ -88,19 +93,25 @@ function verifyAdminPassword(password: string): boolean {
 }
 
 function setSessionCookie(res: ShimRes, token: string): void {
-  const secure = process.env['NODE_ENV'] === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${SESSION_TTL_MS / 1000}${secure}`);
+  const secure = process.env["NODE_ENV"] === "production" ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${SESSION_TTL_MS / 1000}${secure}`,
+  );
 }
 
 function clearSessionCookie(res: ShimRes): void {
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=None; Partitioned; Secure; Max-Age=0`);
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=None; Partitioned; Secure; Max-Age=0`,
+  );
 }
 
 // Stateless signed sessions: Workers keep no memory between requests, so the cookie
 // itself carries the expiry, signed with a key derived from the server-side password hash.
 // Changing the admin password automatically signs out every existing session.
 function sessionKey(): string | null {
-  const explicit = process.env['ADMIN_SESSION_SECRET']?.trim();
+  const explicit = process.env["ADMIN_SESSION_SECRET"]?.trim();
   if (explicit && explicit.length >= 32) return explicit;
   const hash = getAdminPasswordHash();
   return hash ? `orchest-session:${hash}` : null;
@@ -108,7 +119,7 @@ function sessionKey(): string | null {
 
 function sign(value: string): string | null {
   const key = sessionKey();
-  return key ? createHmac('sha256', key).update(value).digest('base64url') : null;
+  return key ? createHmac("sha256", key).update(value).digest("base64url") : null;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -118,19 +129,20 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 function createSessionToken(): string | null {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${randomBytes(16).toString('base64url')}`;
+  const payload = `${Date.now() + SESSION_TTL_MS}.${randomBytes(16).toString("base64url")}`;
   const sig = sign(payload);
   return sig ? `${payload}.${sig}` : null;
 }
 
 function getAdminSession(req: ShimReq): AdminSession | null {
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE] || req.header('x-admin-session') || undefined;
+  const token =
+    parseCookies(req.headers.cookie)[SESSION_COOKIE] || req.header("x-admin-session") || undefined;
   if (!token) return null;
-  const parts = token.split('.');
+  const parts = token.split(".");
   if (parts.length !== 3) return null;
   const payload = `${parts[0]}.${parts[1]}`;
   const expected = sign(payload);
-  if (!expected || !safeEqual(expected, parts[2] ?? '')) return null;
+  if (!expected || !safeEqual(expected, parts[2] ?? "")) return null;
   const expiresAt = Number(parts[0]);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
   const csrfToken = sign(`csrf:${token}`);
@@ -140,23 +152,27 @@ function getAdminSession(req: ShimReq): AdminSession | null {
 function requireAdmin(req: ShimReq, res: ShimRes): AdminSession | null {
   const session = getAdminSession(req);
   if (!session) {
-    res.status(401).json({ error: 'يلزم تسجيل دخول المدير' });
+    res.status(401).json({ error: "يلزم تسجيل دخول المدير" });
     return null;
   }
   return session;
 }
 
 function requireCsrf(req: ShimReq, res: ShimRes, session: AdminSession): boolean {
-  const token = req.header('x-csrf-token');
-  if (!token || token.length !== session.csrfToken.length || !timingSafeEqual(Buffer.from(token), Buffer.from(session.csrfToken))) {
-    res.status(403).json({ error: 'رمز حماية الطلب غير صالح' });
+  const token = req.header("x-csrf-token");
+  if (
+    !token ||
+    token.length !== session.csrfToken.length ||
+    !timingSafeEqual(Buffer.from(token), Buffer.from(session.csrfToken))
+  ) {
+    res.status(403).json({ error: "رمز حماية الطلب غير صالح" });
     return false;
   }
   return true;
 }
 
 function getClientIp(req: ShimReq): string {
-  return req.ip || req.socket.remoteAddress || 'unknown';
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 function isRateLimited(req: ShimReq): boolean {
@@ -172,14 +188,22 @@ function isRateLimited(req: ShimReq): boolean {
 }
 
 function readErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : "unknown error";
 }
 
 function isCatalogTrack(value: unknown): value is CatalogTrack {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const track = value as Record<string, unknown>;
-  return ['id', 'title', 'artist', 'rhythm', 'categoryId', 'categoryLabel', 'code', 'description']
-    .every((key) => typeof track[key] === 'string' && (track[key] as string).length <= 500);
+  return [
+    "id",
+    "title",
+    "artist",
+    "rhythm",
+    "categoryId",
+    "categoryLabel",
+    "code",
+    "description",
+  ].every((key) => typeof track[key] === "string" && (track[key] as string).length <= 500);
 }
 
 function parseCatalogTracks(value: unknown): CatalogTrack[] {
@@ -188,14 +212,14 @@ function parseCatalogTracks(value: unknown): CatalogTrack[] {
 }
 
 function parseBoundedText(value: unknown, maxLength: number): string | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const text = value.trim();
   return text.length > 0 && text.length <= maxLength ? text : null;
 }
 
 function rejectRateLimited(req: ShimReq, res: ShimRes): boolean {
   if (!isRateLimited(req)) return false;
-  res.status(429).json({ error: 'طلبات كثيرة. يرجى المحاولة بعد قليل.' });
+  res.status(429).json({ error: "طلبات كثيرة. يرجى المحاولة بعد قليل." });
   return true;
 }
 
@@ -209,7 +233,7 @@ function rejectLoginRateLimited(req: ShimReq, res: ShimRes): boolean {
     return false;
   }
   if (current.count < 5) return false;
-  res.status(429).json({ error: 'محاولات تسجيل دخول كثيرة. يرجى المحاولة بعد 15 دقيقة.' });
+  res.status(429).json({ error: "محاولات تسجيل دخول كثيرة. يرجى المحاولة بعد 15 دقيقة." });
   return true;
 }
 
@@ -224,27 +248,27 @@ function recordLoginFailure(req: ShimReq): void {
   current.count += 1;
 }
 
-app.post('/api/auth/login', (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   if (rejectLoginRateLimited(req, res)) return null;
-  const password = parseBoundedText(req.body?.['password'], 256);
+  const password = parseBoundedText(req.body?.["password"], 256);
   if (!password || !verifyAdminPassword(password)) {
     recordLoginFailure(req);
-    return res.status(401).json({ error: 'بيانات تسجيل الدخول غير صحيحة' });
+    return res.status(401).json({ error: "بيانات تسجيل الدخول غير صحيحة" });
   }
 
   const sessionToken = createSessionToken();
-  if (!sessionToken) return res.status(503).json({ error: 'لم يتم إعداد كلمة مرور المدير بعد' });
+  if (!sessionToken) return res.status(503).json({ error: "لم يتم إعداد كلمة مرور المدير بعد" });
   setSessionCookie(res, sessionToken);
   return res.json({ authenticated: true, token: sessionToken });
 });
 
-app.get('/api/auth/session', (req, res) => {
+app.get("/api/auth/session", (req, res) => {
   const session = getAdminSession(req);
   if (!session) return res.json({ authenticated: false });
   return res.json({ authenticated: true, csrfToken: session.csrfToken });
 });
 
-app.post('/api/auth/logout', (_req, res) => {
+app.post("/api/auth/logout", (_req, res) => {
   clearSessionCookie(res);
   return res.json({ authenticated: false });
 });
@@ -257,86 +281,122 @@ const aiClient = createGatewayAiClient();
  */
 function analyzeSemanticIntentFallback(query: string, tracks: CatalogTrack[]) {
   const cleanQ = query.toLowerCase().trim();
-  let detectedIntent = 'طلب زفة خليجية مخصصة';
+  let detectedIntent = "طلب زفة خليجية مخصصة";
   const matches: Array<{ trackId: string; score: number; reason: string }> = [];
 
-  const wantsWithoutMusic = cleanQ.includes('بدون موسيقى') || cleanQ.includes('بلا موسيقى') || cleanQ.includes('اسلامية') || cleanQ.includes('إسلامي');
-  const wantsDufoof = cleanQ.includes('دفوف') || cleanQ.includes('دف') || cleanQ.includes('إيقاع');
-  const wantsOrchestra = cleanQ.includes('اوركسترا') || cleanQ.includes('موسيقى') || cleanQ.includes('كمان');
-  const wantsCalm = cleanQ.includes('هادي') || cleanQ.includes('هدوء') || cleanQ.includes('رومانسي') || cleanQ.includes('ناعم');
-  const wantsLuxury = cleanQ.includes('فخم') || cleanQ.includes('ملكي') || cleanQ.includes('هيبة') || cleanQ.includes('كبير');
-  const wantsBride = cleanQ.includes('عروس') || cleanQ.includes('زفاف') || cleanQ.includes('عرس') || cleanQ.includes('دخلة') || cleanQ.includes('مسيرة');
-  const wantsGroom = cleanQ.includes('عريس') || cleanQ.includes('معرس') || cleanQ.includes('رجال');
-  const wantsSheilat = cleanQ.includes('شيلة') || cleanQ.includes('شيلات') || cleanQ.includes('حماس') || cleanQ.includes('فخر');
-  const wantsWelcome = cleanQ.includes('ترحيب') || cleanQ.includes('ضيوف') || cleanQ.includes('مرحبا') || cleanQ.includes('هلا');
-  const wantsBaby = cleanQ.includes('مولود') || cleanQ.includes('مواليد') || cleanQ.includes('عقيقة') || cleanQ.includes('بيبي');
+  const wantsWithoutMusic =
+    cleanQ.includes("بدون موسيقى") ||
+    cleanQ.includes("بلا موسيقى") ||
+    cleanQ.includes("اسلامية") ||
+    cleanQ.includes("إسلامي");
+  const wantsDufoof = cleanQ.includes("دفوف") || cleanQ.includes("دف") || cleanQ.includes("إيقاع");
+  const wantsOrchestra =
+    cleanQ.includes("اوركسترا") || cleanQ.includes("موسيقى") || cleanQ.includes("كمان");
+  const wantsCalm =
+    cleanQ.includes("هادي") ||
+    cleanQ.includes("هدوء") ||
+    cleanQ.includes("رومانسي") ||
+    cleanQ.includes("ناعم");
+  const wantsLuxury =
+    cleanQ.includes("فخم") ||
+    cleanQ.includes("ملكي") ||
+    cleanQ.includes("هيبة") ||
+    cleanQ.includes("كبير");
+  const wantsBride =
+    cleanQ.includes("عروس") ||
+    cleanQ.includes("زفاف") ||
+    cleanQ.includes("عرس") ||
+    cleanQ.includes("دخلة") ||
+    cleanQ.includes("مسيرة");
+  const wantsGroom = cleanQ.includes("عريس") || cleanQ.includes("معرس") || cleanQ.includes("رجال");
+  const wantsSheilat =
+    cleanQ.includes("شيلة") ||
+    cleanQ.includes("شيلات") ||
+    cleanQ.includes("حماس") ||
+    cleanQ.includes("فخر");
+  const wantsWelcome =
+    cleanQ.includes("ترحيب") ||
+    cleanQ.includes("ضيوف") ||
+    cleanQ.includes("مرحبا") ||
+    cleanQ.includes("هلا");
+  const wantsBaby =
+    cleanQ.includes("مولود") ||
+    cleanQ.includes("مواليد") ||
+    cleanQ.includes("عقيقة") ||
+    cleanQ.includes("بيبي");
 
   // Synthesize detected intent string
   const intentParts: string[] = [];
-  if (wantsBride) intentParts.push('زفة عروس ملكية');
-  if (wantsGroom) intentParts.push('مسيرة عريس');
-  if (wantsSheilat) intentParts.push('شيلة حماسية');
-  if (wantsWelcome) intentParts.push('ترحيب بالضيوف');
-  if (wantsBaby) intentParts.push('استقبال مواليد');
-  if (wantsCalm) intentParts.push('بطابع هادئ ورومانسي');
-  if (wantsLuxury) intentParts.push('بأجواء فخمة');
-  if (wantsWithoutMusic) intentParts.push('بدون موسيقى (إسلامية)');
-  if (wantsDufoof) intentParts.push('بإيقاع الدفوف الخليجية');
+  if (wantsBride) intentParts.push("زفة عروس ملكية");
+  if (wantsGroom) intentParts.push("مسيرة عريس");
+  if (wantsSheilat) intentParts.push("شيلة حماسية");
+  if (wantsWelcome) intentParts.push("ترحيب بالضيوف");
+  if (wantsBaby) intentParts.push("استقبال مواليد");
+  if (wantsCalm) intentParts.push("بطابع هادئ ورومانسي");
+  if (wantsLuxury) intentParts.push("بأجواء فخمة");
+  if (wantsWithoutMusic) intentParts.push("بدون موسيقى (إسلامية)");
+  if (wantsDufoof) intentParts.push("بإيقاع الدفوف الخليجية");
 
-  detectedIntent = intentParts.length > 0 ? intentParts.join(' • ') : 'زفات وشيلات ملكية مختارة';
+  detectedIntent = intentParts.length > 0 ? intentParts.join(" • ") : "زفات وشيلات ملكية مختارة";
 
   for (const track of tracks) {
     let score = 30; // base score
-    let reasons: string[] = [];
+    const reasons: string[] = [];
 
     // Check rhythm
     if (wantsWithoutMusic) {
-      if (track.rhythm === 'بدون موسيقى') {
+      if (track.rhythm === "بدون موسيقى") {
         score += 35;
-        reasons.push('تنفيذ نقي بدون موسيقى 100%');
+        reasons.push("تنفيذ نقي بدون موسيقى 100%");
       } else {
         score -= 20;
       }
     }
     if (wantsDufoof) {
-      if (track.rhythm === 'دفوف') {
+      if (track.rhythm === "دفوف") {
         score += 35;
-        reasons.push('إيقاع دفوف خليجية نقية');
+        reasons.push("إيقاع دفوف خليجية نقية");
       }
     }
-    if (wantsOrchestra && track.rhythm === 'أوركسترا') {
+    if (wantsOrchestra && track.rhythm === "أوركسترا") {
       score += 30;
-      reasons.push('توزيع أوركسترالي ملكي فخم');
+      reasons.push("توزيع أوركسترالي ملكي فخم");
     }
 
     // Check category & mood
-    if (wantsBride && track.categoryId === 'zaffat-bride') {
+    if (wantsBride && track.categoryId === "zaffat-bride") {
       score += 25;
-      reasons.push('مخصصة لإطلالة ومسيرة العروس');
+      reasons.push("مخصصة لإطلالة ومسيرة العروس");
     }
-    if (wantsSheilat && track.categoryId === 'sheilat-enthusiastic') {
+    if (wantsSheilat && track.categoryId === "sheilat-enthusiastic") {
       score += 30;
-      reasons.push('شيلة حماسية وقصائد فخر');
+      reasons.push("شيلة حماسية وقصائد فخر");
     }
-    if (wantsWelcome && track.categoryId === 'welcoming') {
+    if (wantsWelcome && track.categoryId === "welcoming") {
       score += 30;
-      reasons.push('لحن ترحيبي دافئ لضيوف الحفل');
+      reasons.push("لحن ترحيبي دافئ لضيوف الحفل");
     }
-    if (wantsBaby && track.categoryId === 'babies') {
+    if (wantsBaby && track.categoryId === "babies") {
       score += 40;
-      reasons.push('مقطوعة رقيقة لاستقبال المواليد');
+      reasons.push("مقطوعة رقيقة لاستقبال المواليد");
     }
 
     // Check calm / gentle
     if (wantsCalm) {
-      if (track.rhythm === 'بدون موسيقى' || track.title.includes('كلاسيك') || track.title.includes('لطيفة') || track.title.includes('فخمة')) {
+      if (
+        track.rhythm === "بدون موسيقى" ||
+        track.title.includes("كلاسيك") ||
+        track.title.includes("لطيفة") ||
+        track.title.includes("فخمة")
+      ) {
         score += 20;
-        reasons.push('تناغم هادئ يمنح المسيرة هيبة وسكينة');
+        reasons.push("تناغم هادئ يمنح المسيرة هيبة وسكينة");
       }
     }
 
     // Keyword relevance
-    const textCorpus = `${track.title} ${track.artist} ${track.description} ${track.categoryLabel}`.toLowerCase();
+    const textCorpus =
+      `${track.title} ${track.artist} ${track.description} ${track.categoryLabel}`.toLowerCase();
     const words = cleanQ.split(/\s+/).filter((w) => w.length > 2);
     for (const w of words) {
       if (textCorpus.includes(w)) {
@@ -348,7 +408,8 @@ function analyzeSemanticIntentFallback(query: string, tracks: CatalogTrack[]) {
     matches.push({
       trackId: track.id,
       score: finalScore,
-      reason: reasons.length > 0 ? reasons.slice(0, 2).join(' مع ') : 'تطابق في الطابع الصوتي والتصنيف',
+      reason:
+        reasons.length > 0 ? reasons.slice(0, 2).join(" مع ") : "تطابق في الطابع الصوتي والتصنيف",
     });
   }
 
@@ -361,24 +422,24 @@ function analyzeSemanticIntentFallback(query: string, tracks: CatalogTrack[]) {
 }
 
 // 1. Semantic Search API Endpoint (البحث الدلالي الذكي)
-app.post('/api/ai/semantic-search', async (req, res) => {
+app.post("/api/ai/semantic-search", async (req, res) => {
   try {
     if (rejectRateLimited(req, res)) return null;
-    const query = parseBoundedText(req.body?.['query'], 300);
-    const tracks = parseCatalogTracks(req.body?.['tracks']);
+    const query = parseBoundedText(req.body?.["query"], 300);
+    const tracks = parseCatalogTracks(req.body?.["tracks"]);
 
     if (!query) {
-      return res.json({ matches: [], intentSummary: '' });
+      return res.json({ matches: [], intentSummary: "" });
     }
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
-      return res.json({ matches: [], intentSummary: '' });
+      return res.json({ matches: [], intentSummary: "" });
     }
 
     // If Gemini client available, attempt LLM call with fallback
     if (aiClient) {
       try {
-          const catalogSummary = tracks.map((t: CatalogTrack) => ({
+        const catalogSummary = tracks.map((t: CatalogTrack) => ({
           id: t.id,
           title: t.title,
           artist: t.artist,
@@ -399,11 +460,11 @@ app.post('/api/ai/semantic-search', async (req, res) => {
 ${JSON.stringify(catalogSummary, null, 2)}`;
 
         const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: "gemini-3.8-flash",
           contents: prompt,
           config: {
             temperature: 0.3,
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
               properties: {
@@ -417,24 +478,27 @@ ${JSON.stringify(catalogSummary, null, 2)}`;
                       score: { type: Type.NUMBER },
                       reason: { type: Type.STRING },
                     },
-                    required: ['trackId', 'score', 'reason'],
+                    required: ["trackId", "score", "reason"],
                   },
                 },
               },
-              required: ['detectedIntent', 'matches'],
+              required: ["detectedIntent", "matches"],
             },
           },
         });
 
-        const parsed = JSON.parse(response.text || '{}');
+        const parsed = JSON.parse(response.text || "{}");
         if (parsed.matches && Array.isArray(parsed.matches) && parsed.matches.length > 0) {
           return res.json({
             matches: parsed.matches,
-            intentSummary: parsed.detectedIntent || '',
+            intentSummary: parsed.detectedIntent || "",
           });
         }
       } catch (geminiErr: unknown) {
-        console.warn('Gemini temporary API spike, falling back to intelligent semantic engine:', readErrorMessage(geminiErr));
+        console.warn(
+          "Gemini temporary API spike, falling back to intelligent semantic engine:",
+          readErrorMessage(geminiErr),
+        );
       }
     }
 
@@ -445,25 +509,27 @@ ${JSON.stringify(catalogSummary, null, 2)}`;
       intentSummary: fallbackResult.detectedIntent,
     });
   } catch (error: unknown) {
-    console.error('Semantic Search Critical Error:', readErrorMessage(error));
-    return res.status(500).json({ error: 'تعذر تنفيذ البحث حالياً', matches: [], intentSummary: '' });
+    console.error("Semantic Search Critical Error:", readErrorMessage(error));
+    return res
+      .status(500)
+      .json({ error: "تعذر تنفيذ البحث حالياً", matches: [], intentSummary: "" });
   }
 });
 
 // 2. AI SEO & Marketing Description Generator for Studio Owner
-app.post('/api/ai/generate-seo', async (req, res) => {
+app.post("/api/ai/generate-seo", async (req, res) => {
   try {
     const session = requireAdmin(req, res);
     if (!session || !requireCsrf(req, res, session)) return null;
     if (rejectRateLimited(req, res)) return null;
-    const title = parseBoundedText(req.body?.['title'], 160);
-    const artist = parseBoundedText(req.body?.['artist'], 120);
-    const category = parseBoundedText(req.body?.['category'], 120) || undefined;
-    const rhythm = parseBoundedText(req.body?.['rhythm'], 80) || undefined;
-    const notes = parseBoundedText(req.body?.['notes'], 500) || undefined;
+    const title = parseBoundedText(req.body?.["title"], 160);
+    const artist = parseBoundedText(req.body?.["artist"], 120);
+    const category = parseBoundedText(req.body?.["category"], 120) || undefined;
+    const rhythm = parseBoundedText(req.body?.["rhythm"], 80) || undefined;
+    const notes = parseBoundedText(req.body?.["notes"], 500) || undefined;
 
     if (!title || !artist) {
-      return res.status(400).json({ error: 'العنوان واسم المنشد مطلوبان' });
+      return res.status(400).json({ error: "العنوان واسم المنشد مطلوبان" });
     }
 
     if (aiClient) {
@@ -472,9 +538,9 @@ app.post('/api/ai/generate-seo', async (req, res) => {
 المطلوب توليد بيانات تسويقية متكاملة ومحسنة لمحركات البحث للعمل الصوتي التالي:
 - عنوان العمل: "${title}"
 - المنشد: "${artist}"
-- التصنيف: "${category || 'زفات عروس'}"
-- نوع الإيقاع: "${rhythm || 'بدون موسيقى'}"
-${notes ? `- ملاحظات إضافية: "${notes}"` : ''}
+- التصنيف: "${category || "زفات عروس"}"
+- نوع الإيقاع: "${rhythm || "بدون موسيقى"}"
+${notes ? `- ملاحظات إضافية: "${notes}"` : ""}
 
 المخرجات المطلوبة بتنسيق JSON:
 1. metaTitle: عنوان SEO احترافي وجذاب لجوجل (أقل من 60 حرفاً).
@@ -484,11 +550,11 @@ ${notes ? `- ملاحظات إضافية: "${notes}"` : ''}
 5. targetAudience: الفئة المناسبة لهذا العمل.`;
 
         const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: "gemini-3.8-flash",
           contents: prompt,
           config: {
             temperature: 0.4,
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
               properties: {
@@ -501,17 +567,26 @@ ${notes ? `- ملاحظات إضافية: "${notes}"` : ''}
                 },
                 targetAudience: { type: Type.STRING },
               },
-              required: ['metaTitle', 'metaDescription', 'marketingDescription', 'recommendedTags', 'targetAudience'],
+              required: [
+                "metaTitle",
+                "metaDescription",
+                "marketingDescription",
+                "recommendedTags",
+                "targetAudience",
+              ],
             },
           },
         });
 
-        const parsed = JSON.parse(response.text || '{}');
+        const parsed = JSON.parse(response.text || "{}");
         if (parsed.metaTitle) {
           return res.json(parsed);
         }
       } catch (geminiErr: unknown) {
-        console.warn('Gemini SEO spike, using luxury template generator:', readErrorMessage(geminiErr));
+        console.warn(
+          "Gemini SEO spike, using luxury template generator:",
+          readErrorMessage(geminiErr),
+        );
       }
     }
 
@@ -523,29 +598,29 @@ ${notes ? `- ملاحظات إضافية: "${notes}"` : ''}
       recommendedTags: [
         title,
         artist,
-        category || 'زفات عروس',
-        rhythm || 'بدون موسيقى',
-        'زفات خليجية',
-        'أوركست ستوديو',
-        'تنفيذ بالأسماء',
+        category || "زفات عروس",
+        rhythm || "بدون موسيقى",
+        "زفات خليجية",
+        "أوركست ستوديو",
+        "تنفيذ بالأسماء",
       ],
-      targetAudience: 'حفلات الزفاف الملكية، العرسان والمناسبات الخليجية الكبرى',
+      targetAudience: "حفلات الزفاف الملكية، العرسان والمناسبات الخليجية الكبرى",
     });
   } catch (error: unknown) {
-    console.error('SEO Generator Error:', readErrorMessage(error));
-    return res.status(500).json({ error: 'تعذر توليد الوصف حالياً' });
+    console.error("SEO Generator Error:", readErrorMessage(error));
+    return res.status(500).json({ error: "تعذر توليد الوصف حالياً" });
   }
 });
 
 // 3. AI Concierge Chatbot for Customers ("اسأل مساعد أوركست")
-app.post('/api/ai/concierge', async (req, res) => {
+app.post("/api/ai/concierge", async (req, res) => {
   try {
     if (rejectRateLimited(req, res)) return null;
-    const message = parseBoundedText(req.body?.['message'], 500);
-    const tracks = parseCatalogTracks(req.body?.['tracks']);
+    const message = parseBoundedText(req.body?.["message"], 500);
+    const tracks = parseCatalogTracks(req.body?.["tracks"]);
 
     if (!message) {
-      return res.status(400).json({ error: 'الرسالة مطلوبة' });
+      return res.status(400).json({ error: "الرسالة مطلوبة" });
     }
 
     const catalogList = tracks;
@@ -574,12 +649,12 @@ app.post('/api/ai/concierge', async (req, res) => {
 ${JSON.stringify(catalogData, null, 2)}`;
 
         const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: "gemini-3.8-flash",
           contents: `سؤال الزبون: "${message}"`,
           config: {
             systemInstruction,
             temperature: 0.4,
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
               properties: {
@@ -590,17 +665,24 @@ ${JSON.stringify(catalogData, null, 2)}`;
                 },
                 suggestedModification: { type: Type.STRING },
               },
-              required: ['reply', 'recommendedTrackIds'],
+              required: ["reply", "recommendedTrackIds"],
             },
           },
         });
 
-        const parsed = JSON.parse(response.text || '{}');
-        if (parsed.reply && Array.isArray(parsed.recommendedTrackIds) && parsed.recommendedTrackIds.length > 0) {
+        const parsed = JSON.parse(response.text || "{}");
+        if (
+          parsed.reply &&
+          Array.isArray(parsed.recommendedTrackIds) &&
+          parsed.recommendedTrackIds.length > 0
+        ) {
           return res.json(parsed);
         }
       } catch (geminiErr: unknown) {
-        console.warn('Gemini Concierge spike, using intelligent fallback concierge:', readErrorMessage(geminiErr));
+        console.warn(
+          "Gemini Concierge spike, using intelligent fallback concierge:",
+          readErrorMessage(geminiErr),
+        );
       }
     }
 
@@ -611,103 +693,268 @@ ${JSON.stringify(catalogData, null, 2)}`;
     return res.json({
       reply: `يا أهلاً وسهلاً بك في استوديو أوركست! 🎵 ألف مبروك مقدماً. بناءً على رغبتك (${semanticMatches.detectedIntent})، قمت باختيار هذه الأعمال الصوتية الملكية التي تتطابق تماماً مع إحساس المسيرة وجودة الاستوديو التي تبحث عنها:`,
       recommendedTrackIds: topIds.length > 0 ? topIds : catalogList.slice(0, 3).map((t) => t.id),
-      suggestedModification: 'تغيير أسماء العروسين مع إمكانية إضافة مقدمة شعرية خاصة بالأسماء',
+      suggestedModification: "تغيير أسماء العروسين مع إمكانية إضافة مقدمة شعرية خاصة بالأسماء",
     });
   } catch (error: unknown) {
-    console.error('Concierge Error:', readErrorMessage(error));
-    return res.status(500).json({ error: 'تعذر تشغيل المساعد حالياً' });
+    console.error("Concierge Error:", readErrorMessage(error));
+    return res.status(500).json({ error: "تعذر تشغيل المساعد حالياً" });
   }
 });
-
 
 export { app };
 
 // ===== Admin data writes (persistent). Reads happen in the browser through public read rules;
 // every write here requires a valid admin session + CSRF token and runs with the server-only key.
 async function adminDb() {
-  const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
 
 function str(v: unknown, max = 2000): string {
-  return typeof v === 'string' ? v.slice(0, max) : '';
+  return typeof v === "string" ? v.slice(0, max) : "";
 }
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+function bool(v: unknown): boolean {
+  return v === true || v === "true" || v === 1;
+}
+function jsonStringArray(v: unknown, maxItems = 12, maxLength = 300): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item) => str(item, maxLength).trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+function isoOrNull(v: unknown): string | null {
+  const value = str(v, 40).trim();
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+function validateOfferInput(value: unknown): { data?: Record<string, unknown>; error?: string } {
+  const offer = (value ?? {}) as Record<string, unknown>;
+  const title = str(offer["title"], 255).trim();
+  const message = str(offer["whatsappMessageTemplate"], 4000).trim();
+  const type = str(offer["type"], 30);
+  const startDate = isoOrNull(offer["startDate"]);
+  const endDate = isoOrNull(offer["endDate"]);
+  if (!title) return { error: "عنوان العرض مطلوب" };
+  if (!message) return { error: "رسالة واتساب مطلوبة" };
+  if (type !== "text_card" && type !== "banner_image") return { error: "نوع العرض غير صالح" };
+  if (offer["startDate"] && !startDate) return { error: "تاريخ البداية غير صالح" };
+  if (offer["endDate"] && !endDate) return { error: "تاريخ النهاية غير صالح" };
+  if (startDate && endDate && new Date(endDate) < new Date(startDate))
+    return { error: "تاريخ النهاية يجب أن يكون بعد البداية" };
+  const current =
+    offer["priceCurrent"] == null || offer["priceCurrent"] === ""
+      ? null
+      : num(offer["priceCurrent"]);
+  const original =
+    offer["priceOriginal"] == null || offer["priceOriginal"] === ""
+      ? null
+      : num(offer["priceOriginal"]);
+  if (current != null && current < 0) return { error: "السعر الحالي غير صالح" };
+  if (original != null && original < 0) return { error: "السعر السابق غير صالح" };
+  return {
+    data: {
+      title,
+      badge: str(offer["badge"], 100).trim() || null,
+      description: str(offer["description"], 2000).trim() || null,
+      type,
+      banner_url: str(offer["bannerUrl"], 2000).trim() || null,
+      features: jsonStringArray(offer["features"]),
+      price_original: original,
+      price_current: current,
+      currency: str(offer["currency"], 10).trim() || "ر.س",
+      cta_text: str(offer["ctaText"], 100).trim() || "طلب الباقة عبر واتساب",
+      whatsapp_message_template: message,
+      is_active: bool(offer["isActive"]),
+      display_order: Math.max(0, Math.floor(num(offer["displayOrder"]))),
+      start_date: startDate,
+      end_date: endDate,
+    },
+  };
+}
 
-app.post('/api/admin/orders', async (req, res) => {
+app.post("/api/admin/orders", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const db = await adminDb();
-  const { data, error } = await db.from('order_logs').select('*').order('created_at', { ascending: false }).limit(500);
+  const { data, error } = await db
+    .from("order_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) return res.status(500).json({ error: error.message });
-  const visits = await db.from('analytics_events').select('id', { count: 'exact', head: true }).eq('event_type', 'visit');
+  const visits = await db
+    .from("analytics_events")
+    .select("id", { count: "exact", head: true })
+    .eq("event_type", "visit");
   return res.json({ orders: data, visits: visits.count ?? 0 });
 });
+app.post("/api/admin/config", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const [offers, theme] = await Promise.all([
+    db.from("offers_packages").select("*").order("display_order", { ascending: true }).limit(200),
+    db.from("app_theme_settings").select("*").eq("id", "current_settings").limit(1),
+  ]);
+  if (offers.error || theme.error)
+    return res.status(500).json({ error: offers.error?.message ?? theme.error?.message });
+  return res.json({ offers: offers.data ?? [], theme: theme.data?.[0] ?? null });
+});
 
-app.post('/api/admin/mutate', async (req, res) => {
+app.post("/api/admin/mutate", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const b = req.body ?? {};
-  const action = str(b['action'], 50);
+  const action = str(b["action"], 50);
   const db = await adminDb();
   let error: { message: string } | null = null;
 
   switch (action) {
-    case 'addTrack': {
-      const t = (b['track'] ?? {}) as Record<string, unknown>;
-      const cover = str(t['coverUrl']);
-      const dur = num(t['duration']);
-      const fmt = str(t['durationFormatted'], 10);
-      const rhythm = str(t['rhythm'], 50);
-      ({ error } = await db.from('tracks').insert({
-        id: str(t['id'], 100), title: str(t['title'], 200), vocalist: str(t['artist'], 200), artist: str(t['artist'], 200),
-        code: str(t['code'], 50), category_id: str(t['categoryId'], 100) || null, duration: fmt, duration_sec: dur,
-        duration_seconds: dur, duration_formatted: fmt, audio_url: str(t['audioUrl']), cover_image: cover, cover_url: cover,
-        rhythm, has_music: rhythm !== 'بدون موسيقى', is_trend: Boolean(t['isTrend']), is_exclusive: Boolean(t['isExclusive']),
-        execution_days: str(t['executionDays'], 50), suitable_for: Array.isArray(t['suitableFor']) ? t['suitableFor'].map((x) => str(x, 100)) : [],
-        description: str(t['description']), audio_frequency: t['audioFreq'] == null ? null : num(t['audioFreq']), lyrics: str(t['lyrics'], 5000) || null,
-      }));
+    case "upsertOffer": {
+      const validated = validateOfferInput(b["offer"]);
+      if (validated.error || !validated.data)
+        return res.status(400).json({ error: validated.error ?? "بيانات العرض غير صالحة" });
+      const offer = (b["offer"] ?? {}) as Record<string, unknown>;
+      const id = str(offer["id"], 100).trim();
+      ({ error } = await db
+        .from("offers_packages")
+        .upsert({ ...validated.data, ...(id ? { id } : {}) }));
       break;
     }
-    case 'deleteTrack':
-      ({ error } = await db.from('tracks').delete().eq('id', str(b['id'], 100)));
+    case "deleteOffer":
+      ({ error } = await db.from("offers_packages").delete().eq("id", str(b["id"], 100)));
       break;
-    case 'setTrend':
-      ({ error } = await db.from('tracks').update({ is_trend: Boolean(b['value']) }).eq('id', str(b['id'], 100)));
+    case "setOfferActive":
+      ({ error } = await db
+        .from("offers_packages")
+        .update({ is_active: bool(b["value"]), updated_at: new Date().toISOString() })
+        .eq("id", str(b["id"], 100)));
       break;
-    case 'addCategory': {
-      const c = (b['category'] ?? {}) as Record<string, unknown>;
-      const id = str(c['id'], 100);
-      ({ error } = await db.from('categories').insert({ id, slug: id, name: str(c['name'], 200), description: str(c['description']), image_url: str(c['image']) || null, track_count: num(c['count']), sort_order: num(b['sortOrder']) }));
-      break;
-    }
-    case 'deleteCategory': {
-      const id = str(b['id'], 100);
-      ({ error } = await db.from('tracks').update({ category_id: null }).eq('category_id', id));
-      if (!error) ({ error } = await db.from('categories').delete().eq('id', id));
-      break;
-    }
-    case 'reorderCategories': {
-      const ids = Array.isArray(b['ids']) ? b['ids'].map((x) => str(x, 100)).slice(0, 200) : [];
+    case "reorderOffers": {
+      const ids = Array.isArray(b["ids"]) ? b["ids"].map((x) => str(x, 100)).slice(0, 200) : [];
       for (let i = 0; i < ids.length && !error; i++) {
-        ({ error } = await db.from('categories').update({ sort_order: i + 1 }).eq('id', ids[i] ?? ''));
+        ({ error } = await db
+          .from("offers_packages")
+          .update({ display_order: i + 1, updated_at: new Date().toISOString() })
+          .eq("id", ids[i] ?? ""));
       }
       break;
     }
-    case 'setSetting':
-      ({ error } = await db.from('site_settings').upsert({ key: str(b['key'], 100), value: str(b['value'], 500), updated_at: new Date().toISOString() }));
+    case "updateThemeSettings": {
+      const theme = (b["theme"] ?? {}) as Record<string, unknown>;
+      const activeTheme = str(theme["activeTheme"], 50);
+      const allowedThemes = ["default", "ramadan", "eid", "national_day", "wedding_season"];
+      if (!allowedThemes.includes(activeTheme))
+        return res.status(400).json({ error: "الثيم غير صالح" });
+      ({ error } = await db.from("app_theme_settings").upsert({
+        id: "current_settings",
+        active_theme: activeTheme,
+        force_theme_override: bool(theme["forceThemeOverride"]),
+        enable_time_greetings: bool(theme["enableTimeGreetings"]),
+        enable_offers_section: bool(theme["enableOffersSection"]),
+        custom_greetings_override:
+          typeof theme["customGreetingsOverride"] === "object"
+            ? theme["customGreetingsOverride"]
+            : null,
+        updated_at: new Date().toISOString(),
+      }));
       break;
-    case 'setOrderStatus': {
-      const status = str(b['status'], 20);
-      if (!['جديد', 'قيد التنفيذ', 'مكتمل'].includes(status)) return res.status(400).json({ error: 'حالة غير صالحة' });
-      ({ error } = await db.from('order_logs').update({ status }).eq('id', str(b['id'], 100)));
+    }
+    case "addTrack": {
+      const t = (b["track"] ?? {}) as Record<string, unknown>;
+      const cover = str(t["coverUrl"]);
+      const dur = num(t["duration"]);
+      const fmt = str(t["durationFormatted"], 10);
+      const rhythm = str(t["rhythm"], 50);
+      ({ error } = await db.from("tracks").insert({
+        id: str(t["id"], 100),
+        title: str(t["title"], 200),
+        vocalist: str(t["artist"], 200),
+        artist: str(t["artist"], 200),
+        code: str(t["code"], 50),
+        category_id: str(t["categoryId"], 100) || null,
+        duration: fmt,
+        duration_sec: dur,
+        duration_seconds: dur,
+        duration_formatted: fmt,
+        audio_url: str(t["audioUrl"]),
+        cover_image: cover,
+        cover_url: cover,
+        rhythm,
+        has_music: rhythm !== "بدون موسيقى",
+        is_trend: Boolean(t["isTrend"]),
+        is_exclusive: Boolean(t["isExclusive"]),
+        execution_days: str(t["executionDays"], 50),
+        suitable_for: Array.isArray(t["suitableFor"])
+          ? t["suitableFor"].map((x) => str(x, 100))
+          : [],
+        description: str(t["description"]),
+        audio_frequency: t["audioFreq"] == null ? null : num(t["audioFreq"]),
+        lyrics: str(t["lyrics"], 5000) || null,
+      }));
+      break;
+    }
+    case "deleteTrack":
+      ({ error } = await db.from("tracks").delete().eq("id", str(b["id"], 100)));
+      break;
+    case "setTrend":
+      ({ error } = await db
+        .from("tracks")
+        .update({ is_trend: Boolean(b["value"]) })
+        .eq("id", str(b["id"], 100)));
+      break;
+    case "addCategory": {
+      const c = (b["category"] ?? {}) as Record<string, unknown>;
+      const id = str(c["id"], 100);
+      ({ error } = await db.from("categories").insert({
+        id,
+        slug: id,
+        name: str(c["name"], 200),
+        description: str(c["description"]),
+        image_url: str(c["image"]) || null,
+        track_count: num(c["count"]),
+        sort_order: num(b["sortOrder"]),
+      }));
+      break;
+    }
+    case "deleteCategory": {
+      const id = str(b["id"], 100);
+      ({ error } = await db.from("tracks").update({ category_id: null }).eq("category_id", id));
+      if (!error) ({ error } = await db.from("categories").delete().eq("id", id));
+      break;
+    }
+    case "reorderCategories": {
+      const ids = Array.isArray(b["ids"]) ? b["ids"].map((x) => str(x, 100)).slice(0, 200) : [];
+      for (let i = 0; i < ids.length && !error; i++) {
+        ({ error } = await db
+          .from("categories")
+          .update({ sort_order: i + 1 })
+          .eq("id", ids[i] ?? ""));
+      }
+      break;
+    }
+    case "setSetting":
+      ({ error } = await db.from("site_settings").upsert({
+        key: str(b["key"], 100),
+        value: str(b["value"], 500),
+        updated_at: new Date().toISOString(),
+      }));
+      break;
+    case "setOrderStatus": {
+      const status = str(b["status"], 20);
+      if (!["جديد", "قيد التنفيذ", "مكتمل"].includes(status))
+        return res.status(400).json({ error: "حالة غير صالحة" });
+      ({ error } = await db.from("order_logs").update({ status }).eq("id", str(b["id"], 100)));
       break;
     }
     default:
-      return res.status(400).json({ error: 'عملية غير معروفة' });
+      return res.status(400).json({ error: "عملية غير معروفة" });
   }
   if (error) return res.status(500).json({ error: error.message });
   return res.json({ ok: true });
