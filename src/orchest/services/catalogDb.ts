@@ -52,8 +52,9 @@ export async function loadCatalog(): Promise<Catalog> {
       code: r.code,
       duration: r.duration_seconds || r.duration_sec,
       durationFormatted: r.duration_formatted || r.duration,
-      playsCount: r.plays_count ?? 0,
-      likesCount: r.likes_count ?? 0,
+      // Legacy counters were seeded as demo values; recorded events are the source of truth.
+      playsCount: 0,
+      likesCount: 0,
       rhythm: (RHYTHMS as string[]).includes(r.rhythm) ? (r.rhythm as RhythmType) : "بدون موسيقى",
       categoryId: r.category_id ?? "",
       categoryLabel: catName.get(r.category_id ?? "") ?? "",
@@ -80,8 +81,8 @@ export async function loadCatalog(): Promise<Catalog> {
       bio: r.bio,
       genres: Array.isArray(r.genres) ? (r.genres as unknown[]).map(String) : [],
       isVerified: r.is_verified,
-      totalStreams: r.total_streams,
-      tracksCount: r.tracks_count,
+      totalStreams: 0,
+      tracksCount: tracks.filter((track) => track.artist === r.name).length,
     };
     if (r.cover_image) artist.coverImage = r.cover_image;
     return artist;
@@ -126,7 +127,12 @@ export async function loadCatalog(): Promise<Catalog> {
     ...(row.end_date != null ? { endDate: row.end_date } : {}),
     createdAt: row.created_at,
   }));
-  return { tracks, categories, artists, whatsappNumber, offers, themeSettings };
+  const catalogCategories = categories.map((category) => ({
+    ...category,
+    count: tracks.filter((track) => track.categoryId === category.id).length,
+  }));
+
+  return { tracks, categories: catalogCategories, artists, whatsappNumber, offers, themeSettings };
 }
 
 export async function saveOrder(order: OrderRequest): Promise<void> {
@@ -205,12 +211,24 @@ export function recordVisit(): void {
     });
 }
 
+export function recordTrackPlay(trackId: string): void {
+  if (!trackId) return;
+  void supabase
+    .from("analytics_events")
+    .insert({ event_type: "play", track_id: trackId })
+    .then(({ error }) => {
+      if (error) console.error("Playback log failed", error.message);
+    });
+}
+
 export async function adminLoadOrders(
   csrf: string,
-): Promise<{ orders: OrderRequest[]; visits: number }> {
+): Promise<{ orders: OrderRequest[]; visits: number; plays: number; whatsappLeads: number }> {
   const data = (await adminPost("/api/admin/orders", csrf, {})) as {
     orders?: OrderRow[];
     visits?: number;
+    plays?: number;
+    whatsappLeads?: number;
   };
   const orders = (data.orders ?? []).map((r) => {
     const o: OrderRequest = {
@@ -228,5 +246,10 @@ export async function adminLoadOrders(
     if (r.phone) o.phone = r.phone;
     return o;
   });
-  return { orders, visits: data.visits ?? 0 };
+  return {
+    orders,
+    visits: data.visits ?? 0,
+    plays: data.plays ?? 0,
+    whatsappLeads: data.whatsappLeads ?? 0,
+  };
 }

@@ -1,8 +1,7 @@
 import { toast } from 'sonner';
 import React from 'react';
-import { Play, Pause, Heart, Share2, MessageCircle, Eye, ThumbsUp, Sparkles } from 'lucide-react';
+import { Play, Pause, Heart, Share2, MessageCircle, Sparkles } from 'lucide-react';
 import { Track, ThemeMode } from '../types/index';
-import { formatNumberK } from '../utils/trackLogic';
 
 interface TrackCardProps {
   track: Track;
@@ -136,17 +135,6 @@ export const TrackCard: React.FC<TrackCardProps> = ({
             </span>
           </div>
 
-          {/* Social Stats: Views & Likes */}
-          <div className={`flex items-center gap-4 mt-2.5 text-xs font-mono ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            <span className="flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5 opacity-70" />
-              <span>{formatNumberK(track.playsCount)}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <ThumbsUp className="w-3.5 h-3.5 opacity-70" />
-              <span>{track.likesCount}</span>
-            </span>
-          </div>
         </div>
 
         {/* Interactive Action Footer */}

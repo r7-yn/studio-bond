@@ -16,7 +16,6 @@ import {
   Clock, 
   Search, 
   Filter, 
-  ArrowUpRight,
   ChevronLeft,
   X,
   Settings,
@@ -43,7 +42,6 @@ import {
 } from "../types/index";
 import { 
   formatCommas, 
-  formatNumberK, 
   validateWhatsAppNumber, 
   exportOrdersToCSV, 
   exportFullBackupJSON 
@@ -72,6 +70,13 @@ interface AdminDashboardProps {
   onLogout: () => void;
   onBackToStore: () => void;
   onRefreshConfig: () => Promise<void> | void;
+}
+
+interface GeneratedSeo {
+  metaTitle: string;
+  metaDescription: string;
+  recommendedTags: string[];
+  marketingDescription?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -182,7 +187,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newDescription, setNewDescription] = useState('');
   const [isNewTrend, setIsNewTrend] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [generatedSeo, setGeneratedSeo] = useState<any>(null);
+  const [generatedSeo, setGeneratedSeo] = useState<GeneratedSeo | null>(null);
 
   const isDark = theme === 'dark';
 
@@ -233,15 +238,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       code: newCode.trim(),
       duration: durationSec,
       durationFormatted: newDuration,
-      playsCount: 1,
-      likesCount: 1,
+      playsCount: 0,
+      likesCount: 0,
       rhythm: newRhythm,
       categoryId: newCategory,
       categoryLabel,
       coverUrl: newCoverUrl.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
       isTrend: isNewTrend,
       isExclusive: true,
-      executionDays: '1-3 أيام',
+      executionDays: 'تُحدّد بعد مراجعة تفاصيل الطلب',
       suitableFor: ['زفاف', 'مناسبة خاصة'],
       createdAt: new Date().toISOString().substring(0, 10),
       description: newDescription.trim() || 'عمل صوتي تم إنشاؤه وتوزيعه عبر استوديو أوركست الخليجي',
@@ -285,7 +290,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
             <span>لوحة التحكم والإحصائيات</span>
             <span className="px-2.5 py-0.5 rounded-full text-xs bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30">
-              Live
+              مسجّل
             </span>
           </h1>
         </div>
@@ -329,10 +334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="text-2xl sm:text-3xl font-black font-mono">
             {formatCommas(kpi.totalVisits)}
           </div>
-          <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold mt-2">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+12% عن الشهر السابق</span>
-          </div>
+          <div className="text-xs text-gray-400 mt-2">إجمالي الزيارات المسجلة</div>
         </div>
 
         {/* Card 2: الاستماعات */}
@@ -348,10 +350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="text-2xl sm:text-3xl font-black font-mono">
             {formatCommas(kpi.totalStreams)}
           </div>
-          <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold mt-2">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+18% تفاعل نشط</span>
-          </div>
+          <div className="text-xs text-gray-400 mt-2">مرات تشغيل مسجلة منذ تفعيل القياس</div>
         </div>
 
         {/* Card 3: طلبات واتساب */}
@@ -367,10 +366,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="text-2xl sm:text-3xl font-black font-mono text-[#25D366]">
             {formatCommas(kpi.whatsappLeads)}
           </div>
-          <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold mt-2">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+34% طلبات جديدة</span>
-          </div>
+          <div className="text-xs text-gray-400 mt-2">سجلات طلب التواصل المحفوظة</div>
         </div>
 
         {/* Card 4: نسبة التحويل */}
@@ -386,10 +382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="text-2xl sm:text-3xl font-black font-mono text-[#D4AF37]">
             {kpi.conversionRate}%
           </div>
-          <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold mt-2">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+22% أداء قياسي</span>
-          </div>
+          <div className="text-xs text-gray-400 mt-2">طلبات محفوظة ÷ زيارات مسجلة</div>
         </div>
       </div>
 
@@ -495,7 +488,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <th className="p-4">العمل الصوتي</th>
                   <th className="p-4">التصنيف</th>
                   <th className="p-4">الإيقاع</th>
-                  <th className="p-4">الاستماعات</th>
                   <th className="p-4">الحالة</th>
                   <th className="p-4">ترند</th>
                   <th className="p-4 text-center">إجراءات</th>
@@ -524,7 +516,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="p-4 text-xs">{tr.categoryLabel}</td>
                     <td className="p-4 text-xs font-semibold">{tr.rhythm}</td>
-                    <td className="p-4 font-mono text-xs">{formatNumberK(tr.playsCount)}</td>
                     <td className="p-4">
                       <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         نشط
@@ -750,81 +741,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Tab 3: Analytics & Visual Insights matching Screenshot 1 & 3 */}
+      {/* Tab 3: Analytics based on persisted catalog and event data */}
       {activeTab === 'analytics' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Chart 1: الأعمال الأكثر طلباً */}
           <div
             className={`p-6 rounded-2xl border ${
               isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
             }`}
           >
-            <h3 className="font-bold text-lg mb-6 flex items-center justify-between">
-              <span>الأعمال الأكثر طلباً وتأثيراً</span>
-              <span className="text-xs text-gray-400 font-normal">آخر 30 يوم</span>
-            </h3>
-
-            <div className="space-y-4">
-              {[
-                { name: 'زفات الدفوف الملكية', count: 1284, percent: 85 },
-                { name: 'الشيلات الحماسية الفاخرة', count: 962, percent: 65 },
-                { name: 'زفات العروس الكلاسيكية', count: 856, percent: 58 },
-                { name: 'زفات الدفوف السريعة', count: 612, percent: 42 },
-                { name: 'مواليد واستقبال', count: 241, percent: 20 },
-              ].map((item, idx) => (
-                <div key={idx}>
-                  <div className="flex justify-between text-xs sm:text-sm font-semibold mb-1.5">
-                    <span>{item.name}</span>
-                    <span className="font-mono text-[#D4AF37]">{item.count.toLocaleString()} طلب</span>
-                  </div>
-                  <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] rounded-full transition-all duration-700"
-                      style={{ width: `${item.percent}%` }}
-                    />
-                  </div>
+            <h3 className="font-bold text-lg mb-2">الأعمال المسجلة حسب التصنيف</h3>
+            <p className="text-xs text-gray-400 mb-6">الأعداد محسوبة من الأعمال الموجودة فعلياً في الكتالوج.</p>
+            <div className="space-y-3">
+              {categories.map((category) => (
+                <div key={category.id} className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
+                  <span className="text-sm font-semibold">{category.name}</span>
+                  <span className="font-mono font-bold text-[#D4AF37]">{category.count.toLocaleString()}</span>
                 </div>
               ))}
+              {categories.length === 0 && <p className="text-sm text-gray-400">لا توجد تصنيفات محمّلة حالياً.</p>}
             </div>
           </div>
 
-          {/* Chart 2: الأقسام الأكثر زيارة (نسب مئوية) */}
           <div
             className={`p-6 rounded-2xl border ${
               isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
             }`}
           >
-            <h3 className="font-bold text-lg mb-6 flex items-center justify-between">
-              <span>الأقسام الأكثر زيارة وتفاعلاً</span>
-              <span className="text-xs text-gray-400 font-normal">توزيع الحصص</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { label: 'زفات عروس', share: 34, color: 'bg-[#D4AF37]' },
-                { label: 'شيلات حماسية', share: 25, color: 'bg-amber-400' },
-                { label: 'ترحيبية', share: 18, color: 'bg-emerald-400' },
-                { label: 'زفات الدفوف', share: 14, color: 'bg-blue-400' },
-                { label: 'أخرى ومواليد', share: 9, color: 'bg-purple-400' },
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  className={`p-4 rounded-xl border flex items-center justify-between ${
-                    isDark ? 'bg-black/20 border-white/5' : 'bg-gray-50 border-black/5'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className={`w-3 h-3 rounded-full ${item.color}`} />
-                    <span className="text-xs sm:text-sm font-semibold">{item.label}</span>
-                  </div>
-                  <span className="font-mono font-bold text-sm">{item.share}%</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 p-4 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 text-xs leading-relaxed text-[#D4AF37]">
-              💡 <strong>رؤية تسويقية:</strong> الطلب على زفات الدفوف بدون موسيقى ارتفع بنسبة 45% خلال هذا الشهر. يُوصى بإضافة 5 أعمال جديدة بالدفوف على الصفحة الرئيسية.
-            </div>
+            <h3 className="font-bold text-lg mb-2">ملخص النشاط المسجّل</h3>
+            <p className="text-xs text-gray-400 mb-6">الإجماليات التالية مأخوذة من سجلات قاعدة البيانات؛ الاستماعات تبدأ من تفعيل تسجيلها.</p>
+            <dl className="space-y-3">
+              <div className="flex justify-between"><dt>زيارات مسجلة</dt><dd className="font-mono">{formatCommas(kpi.totalVisits)}</dd></div>
+              <div className="flex justify-between"><dt>مرات تشغيل مسجلة</dt><dd className="font-mono">{formatCommas(kpi.totalStreams)}</dd></div>
+              <div className="flex justify-between"><dt>طلبات تواصل محفوظة</dt><dd className="font-mono">{formatCommas(kpi.whatsappLeads)}</dd></div>
+              <div className="flex justify-between"><dt>معدل الطلبات إلى الزيارات</dt><dd className="font-mono">{kpi.conversionRate}%</dd></div>
+            </dl>
+            <p className="mt-6 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 p-4 text-xs leading-relaxed text-gray-300">
+              لا نعرض ترتيباً للأعمال أو نسب نمو زمنية قبل توفر بيانات محفوظة كافية لهذه المقارنات.
+            </p>
           </div>
         </div>
       )}
@@ -1153,7 +1106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }),
                         });
                         if (res.ok) {
-                          const data = await res.json();
+                          const data = (await res.json()) as GeneratedSeo;
                           setGeneratedSeo(data);
                           if (data.marketingDescription) {
                             setNewDescription(data.marketingDescription);

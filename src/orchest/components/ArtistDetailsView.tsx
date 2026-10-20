@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   ChevronRight, 
   CheckCircle2, 
-  Headphones, 
   Music2, 
   Sparkles, 
   MessageCircle, 
@@ -14,7 +13,6 @@ import {
   Mic2
 } from 'lucide-react';
 import { Artist, Track, ThemeMode, RhythmType } from '../types/index';
-import { formatNumberK } from '../utils/trackLogic';
 import { TrackCard } from './TrackCard';
 
 interface ArtistDetailsViewProps {
@@ -137,14 +135,6 @@ export const ArtistDetailsView: React.FC<ArtistDetailsViewProps> = ({
                   <span className="font-bold text-white font-mono">{displayTracks.length}</span>
                   <span className="text-gray-400">عمل صوتي متاح</span>
                 </div>
-
-                {artist.totalStreams && (
-                  <div className="flex items-center gap-2">
-                    <Headphones className="w-4 h-4 text-emerald-400" />
-                    <span className="font-bold text-white font-mono">{formatNumberK(artist.totalStreams)}</span>
-                    <span className="text-gray-400">استماع وتفاعل</span>
-                  </div>
-                )}
 
                 <div className="flex items-center gap-1.5">
                   {artist.genres.map((g, i) => (

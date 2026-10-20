@@ -21,7 +21,7 @@ import {
 import { Track, ThemeMode } from '../types/index';
 import { WaveformVisualizer } from './WaveformVisualizer';
 import { TrackCard } from './TrackCard';
-import { formatDuration, formatNumberK } from '../utils/trackLogic';
+import { formatDuration } from '../utils/trackLogic';
 
 interface TrackDetailsViewProps {
   track: Track;
@@ -179,16 +179,8 @@ export const TrackDetailsView: React.FC<TrackDetailsViewProps> = ({
                 {track.description}
               </p>
 
-              {/* Social Stats & Share/Favorite */}
+              {/* Share/Favorite actions */}
               <div className="flex items-center gap-6 text-sm mb-6 pb-6 border-b border-white/10">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-400">الاستماعات:</span>
-                  <span className="font-bold text-white font-mono">{formatNumberK(track.playsCount)}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-400">الإعجابات:</span>
-                  <span className="font-bold text-white font-mono">{track.likesCount}</span>
-                </div>
                 <div className="mr-auto flex items-center gap-2">
                   <button
                     onClick={onToggleFavorite}

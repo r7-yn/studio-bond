@@ -810,17 +810,20 @@ app.post("/api/admin/orders", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const db = await adminDb();
-  const { data, error } = await db
-    .from("order_logs")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const [orders, visits, plays, leads] = await Promise.all([
+    db.from("order_logs").select("*").order("created_at", { ascending: false }).limit(500),
+    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit"),
+    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play"),
+    db.from("order_logs").select("id", { count: "exact", head: true }),
+  ]);
+  const error = orders.error || visits.error || plays.error || leads.error;
   if (error) return res.status(500).json({ error: error.message });
-  const visits = await db
-    .from("analytics_events")
-    .select("id", { count: "exact", head: true })
-    .eq("event_type", "visit");
-  return res.json({ orders: data, visits: visits.count ?? 0 });
+  return res.json({
+    orders: orders.data ?? [],
+    visits: visits.count ?? 0,
+    plays: plays.count ?? 0,
+    whatsappLeads: leads.count ?? 0,
+  });
 });
 app.post("/api/admin/config", async (req, res) => {
   const session = requireAdmin(req, res);

@@ -390,7 +390,7 @@ export const OffersAdminPanel: React.FC<OffersAdminPanelProps> = ({
             id="offer-features"
             value={featuresText}
             onChange={(event) => setFeaturesText(event.target.value)}
-            placeholder={"تنفيذ بالأسماء\nتسليم خلال 48 ساعة"}
+            placeholder={"تنفيذ بالأسماء\nأضف مدة التسليم التي يعتمدها الاستوديو"}
             rows={3}
             className={inputClass(isDark)}
           />

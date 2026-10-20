@@ -1,7 +1,6 @@
 import React from 'react';
-import { CheckCircle2, ChevronLeft, Music2, Headphones, Sparkles, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Music2, Sparkles, ArrowLeft } from 'lucide-react';
 import { Artist, ThemeMode } from '../types/index';
-import { formatNumberK } from '../utils/trackLogic';
 
 interface ArtistsSectionProps {
   artists: Artist[];
@@ -121,14 +120,8 @@ export const ArtistsSection: React.FC<ArtistsSectionProps> = ({
                 <div className="flex items-center gap-3 text-gray-400">
                   <span className="flex items-center gap-1 font-mono">
                     <Music2 className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    <span>{artist.tracksCount || 15} عمل</span>
+                    <span>{artist.tracksCount ?? 0} عمل</span>
                   </span>
-                  {artist.totalStreams && (
-                    <span className="flex items-center gap-1 font-mono">
-                      <Headphones className="w-3.5 h-3.5 text-gray-500" />
-                      <span>{formatNumberK(artist.totalStreams)}</span>
-                    </span>
-                  )}
                 </div>
 
                 <div className="w-7 h-7 rounded-full bg-white/5 group-hover:bg-[#D4AF37] group-hover:text-black flex items-center justify-center transition-colors">

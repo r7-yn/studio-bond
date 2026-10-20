@@ -22,6 +22,7 @@ import {
   adminLoadConfig,
   adminLoadOrders,
   recordVisit,
+  recordTrackPlay,
 } from "./services/catalogDb";
 import { filterTracks, calculateConversionRate, generateWhatsAppUrl } from "./utils/trackLogic";
 import { Header } from "./components/Header";
@@ -107,7 +108,6 @@ export default function App() {
       if (c.whatsappNumber) setWhatsappNumber(c.whatsappNumber);
       setSelectedTrack((prev) => prev ?? c.tracks[0] ?? null);
       setSelectedArtist((prev) => prev ?? c.artists[0] ?? null);
-      setKpi((prev) => ({ ...prev, totalStreams: c.tracks.reduce((n, t) => n + t.playsCount, 0) }));
       setCatalogError(null);
     } catch (e) {
       console.error("Catalog load failed", e);
@@ -180,13 +180,14 @@ export default function App() {
   useEffect(() => {
     if (!adminCsrfToken) return;
     adminLoadOrders(adminCsrfToken)
-      .then(({ orders: list, visits }) => {
+      .then(({ orders: list, visits, plays, whatsappLeads }) => {
         setOrders(list);
         setKpi((prev) => ({
           ...prev,
           totalVisits: visits,
-          whatsappLeads: list.length,
-          conversionRate: calculateConversionRate(list.length, visits),
+          totalStreams: plays,
+          whatsappLeads,
+          conversionRate: calculateConversionRate(whatsappLeads, visits),
         }));
       })
       .catch((e) => console.error("Orders load failed", e));
@@ -348,8 +349,13 @@ export default function App() {
 
   // Sync audio engine state
   useEffect(() => {
+    const recordedTrackIds = new Set<string>();
     const unsubscribe = audioEngine.subscribe((st) => {
       setAudioState(st);
+      if (st.isPlaying && st.trackId && !recordedTrackIds.has(st.trackId)) {
+        recordedTrackIds.add(st.trackId);
+        recordTrackPlay(st.trackId);
+      }
     });
     return unsubscribe;
   }, []);
@@ -377,11 +383,6 @@ export default function App() {
     } else {
       setSelectedTrack(track);
       audioEngine.play(track);
-      // Increment stream count in KPI
-      setKpi((prev) => ({
-        ...prev,
-        totalStreams: prev.totalStreams + 1,
-      }));
     }
   };
 
@@ -665,7 +666,7 @@ export default function App() {
                 <p
                   className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
                 >
-                  استمع واكتشف أكثر من {tracks.length} عمل صوتي متوفر للطلب الفوري
+                  استمع واكتشف {tracks.length} عملاً صوتياً متوفراً للطلب
                 </p>
               </div>
 
