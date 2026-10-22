@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
 import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
 import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
 import {
@@ -34,7 +34,11 @@ import { TrackCard } from "./components/TrackCard";
 import { TrackDetailsView } from "./components/TrackDetailsView";
 import { StickyAudioPlayer } from "./components/StickyAudioPlayer";
 import { OrderModal } from "./components/OrderModal";
-import { AdminDashboard } from "./components/AdminDashboard";
+const AdminDashboard = lazy(() =>
+  import("./components/AdminDashboard").then((module) => ({
+    default: module.AdminDashboard,
+  })),
+);
 import { SearchModal } from "./components/SearchModal";
 import { MobileBottomNav } from "./components/MobileBottomNav";
 import { AiConciergeModal } from "./components/AiConciergeModal";
@@ -979,6 +983,13 @@ export default function App() {
         {/* VIEW 7: ADMIN DASHBOARD */}
         {currentView === "admin" &&
           (isAdminAuthenticated && adminCsrfToken ? (
+            <Suspense
+              fallback={
+                <div className="mx-auto max-w-7xl px-4 py-12 text-center text-sm text-gray-500" role="status">
+                  جارٍ تحميل لوحة الإدارة…
+                </div>
+              }
+            >
             <AdminDashboard
               tracks={tracks}
               artists={artists}
@@ -1009,6 +1020,7 @@ export default function App() {
               onBackToStore={() => setCurrentView("home")}
               onRefreshConfig={refreshAdminConfig}
             />
+            </Suspense>
           ) : (
             <AdminLogin
               theme={theme}

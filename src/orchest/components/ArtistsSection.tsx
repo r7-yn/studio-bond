@@ -73,6 +73,8 @@ export const ArtistsSection: React.FC<ArtistsSectionProps> = ({
                     <img
                       src={artist.avatar}
                       alt={artist.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full rounded-full object-cover border-2 border-[#16161C]"
                     />
                   </div>
