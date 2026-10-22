@@ -59,6 +59,7 @@ interface AdminDashboardProps {
   whatsappNumber: string;
   onUpdateWhatsAppNumber: (newNumber: string) => void;
   onAddTrack: (newTrack: Track) => void;
+  onUpdateTrack: (track: Track) => void;
   onDeleteTrack: (id: string) => void;
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
@@ -89,6 +90,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   whatsappNumber,
   onUpdateWhatsAppNumber,
   onAddTrack,
+  onUpdateTrack,
   onDeleteTrack,
   onToggleTrend,
   onAddCategory,
@@ -102,6 +104,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRefreshConfig,
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     "tracks" | "categories" | "offers" | "orders" | "analytics" | "settings"
