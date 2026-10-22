@@ -1013,6 +1013,18 @@ app.post("/api/admin/config", async (req, res) => {
   return res.json({ offers: offers.data ?? [], theme: theme.data?.[0] ?? null });
 });
 
+app.post("/api/admin/catalog", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const { data, error } = await db
+    .from("tracks")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ tracks: data ?? [] });
+});
+
 app.post("/api/admin/mutate", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
@@ -1109,6 +1121,7 @@ app.post("/api/admin/mutate", async (req, res) => {
         description: str(t["description"]),
         audio_frequency: t["audioFreq"] == null ? null : num(t["audioFreq"]),
         lyrics: str(t["lyrics"], 5000) || null,
+        ...(t["isPublished"] === false ? { is_published: false } : {}),
       }));
       break;
     }
@@ -1156,6 +1169,12 @@ app.post("/api/admin/mutate", async (req, res) => {
       ({ error } = await db
         .from("tracks")
         .update({ is_trend: Boolean(b["value"]) })
+        .eq("id", str(b["id"], 100)));
+      break;
+    case "setTrackPublished":
+      ({ error } = await db
+        .from("tracks")
+        .update({ is_published: Boolean(b["value"]), updated_at: new Date().toISOString() })
         .eq("id", str(b["id"], 100)));
       break;
     case "addArtist": {
@@ -1241,6 +1260,15 @@ app.post("/api/admin/mutate", async (req, res) => {
     default:
       return res.status(400).json({ error: "عملية غير معروفة" });
   }
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    const migrationRequired = error.message.includes("is_published");
+    return res
+      .status(migrationRequired ? 503 : 500)
+      .json({
+        error: migrationRequired
+          ? "لتفعيل المسودات والإخفاء، يلزم تطبيق ترحيل حالة النشر على قاعدة البيانات."
+          : error.message,
+      });
+  }
   return res.json({ ok: true });
 });

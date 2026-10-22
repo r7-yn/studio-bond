@@ -25,6 +25,8 @@ import {
   Database,
   Phone,
   Check,
+  Eye,
+  EyeOff,
   AlertCircle,
   Layers,
   FolderPlus
@@ -63,6 +65,7 @@ interface AdminDashboardProps {
   onAddTrack: (newTrack: Track) => void;
   onUpdateTrack: (track: Track) => void;
   onDeleteTrack: (id: string) => void;
+  onToggleTrackPublished: (id: string) => void;
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
   onAddArtist: (artist: Artist) => void;
@@ -98,6 +101,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddTrack,
   onUpdateTrack,
   onDeleteTrack,
+  onToggleTrackPublished,
   onToggleTrend,
   onAddCategory,
   onAddArtist,
@@ -200,6 +204,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newCoverUrl, setNewCoverUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [isNewTrend, setIsNewTrend] = useState(false);
+  const [isPublished, setIsPublished] = useState(true);
+  const [showTrackPreview, setShowTrackPreview] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [generatedSeo, setGeneratedSeo] = useState<GeneratedSeo | null>(null);
 
@@ -304,6 +310,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewDuration('04:30');
     setNewRhythm('بدون موسيقى');
     setIsNewTrend(false);
+    setIsPublished(true);
+    setShowTrackPreview(false);
     setEditingTrackId(null);
   };
 
@@ -318,6 +326,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewCoverUrl(track.coverUrl);
     setNewDescription(track.description);
     setIsNewTrend(Boolean(track.isTrend));
+    setIsPublished(track.isPublished !== false);
+    setShowTrackPreview(false);
     setGeneratedSeo(null);
     setIsAddModalOpen(true);
   };
@@ -349,6 +359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         categoryLabel,
         coverUrl: newCoverUrl.trim() || existing.coverUrl,
         isTrend: isNewTrend,
+        isPublished,
         description: newDescription.trim() || existing.description,
       };
       onUpdateTrack(updated);
@@ -371,6 +382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       categoryLabel,
       coverUrl: newCoverUrl.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
       isTrend: isNewTrend,
+      isPublished,
       isExclusive: true,
       executionDays: 'تُحدّد بعد مراجعة تفاصيل الطلب',
       suitableFor: ['زفاف', 'مناسبة خاصة'],
@@ -663,8 +675,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <td className="p-4 text-xs">{tr.categoryLabel}</td>
                     <td className="p-4 text-xs font-semibold">{tr.rhythm}</td>
                     <td className="p-4">
-                      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        نشط
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                        tr.isPublished === false
+                          ? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+                          : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      }`}>
+                        {tr.isPublished === false ? 'مخفي' : 'منشور'}
                       </span>
                     </td>
                     <td className="p-4">
@@ -694,6 +710,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="p-1.5 rounded-lg text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
                         >
                           <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onToggleTrackPublished(tr.id)}
+                          aria-label={tr.isPublished === false ? `نشر ${tr.title}` : `إخفاء ${tr.title}`}
+                          title={tr.isPublished === false ? 'نشر العمل' : 'إخفاء مؤقت'}
+                          className="p-1.5 rounded-lg text-sky-400 hover:bg-sky-500/10 cursor-pointer"
+                        >
+                          {tr.isPublished === false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                         </button>
                         <button
                           onClick={() => onDeleteTrack(tr.id)}
@@ -1231,7 +1255,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
 
           <div
-            className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
+            className={`relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
               isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
             }`}
           >
@@ -1431,6 +1455,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
                   }`}
                 />
+              </div>
+
+              <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
+                isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-gray-50'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  className="mt-0.5 accent-[#D4AF37]"
+                />
+                <span>
+                  <span className="block text-xs font-bold">نشر العمل للزوار</span>
+                  <span className="mt-1 block text-[11px] text-gray-400">
+                    عند إلغاء الاختيار يُحفظ العمل كمسودة ويظل ظاهراً للمدير فقط.
+                  </span>
+                </span>
+              </label>
+
+              <div>
+                <button
+                  type="button"
+                  aria-expanded={showTrackPreview}
+                  onClick={() => setShowTrackPreview((visible) => !visible)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#D4AF37]/40 px-3 py-2 text-xs font-bold text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                >
+                  <Eye className="w-4 h-4" />
+                  {showTrackPreview ? 'إخفاء المعاينة' : 'معاينة العمل قبل الحفظ'}
+                </button>
+                {showTrackPreview && (
+                  <div className={`mt-3 flex gap-3 rounded-2xl border p-3 ${
+                    isDark ? 'border-white/10 bg-black/30' : 'border-black/10 bg-white'
+                  }`}>
+                    <img
+                      src={newCoverUrl || tracks.find((track) => track.id === editingTrackId)?.coverUrl || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80'}
+                      alt={newTitle.trim() || 'غلاف العمل'}
+                      className="h-20 w-20 rounded-xl object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold">{newTitle.trim() || 'اسم العمل'}</p>
+                      <p className="mt-1 text-xs text-gray-400">{newArtist.trim() || 'اسم المنشد'}</p>
+                      <p className="mt-1 text-xs text-gray-400">{categories.find((category) => category.id === newCategory)?.name ?? 'التصنيف'} · {newRhythm}</p>
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] ${
+                        isPublished ? 'bg-emerald-500/15 text-emerald-500' : 'bg-gray-500/15 text-gray-400'
+                      }`}>
+                        {isPublished ? 'سيظهر للزوار بعد الحفظ' : 'سيُحفظ كمسودة مخفية'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button

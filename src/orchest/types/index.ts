@@ -18,6 +18,7 @@ export interface Track {
   audioUrl?: string;
   lyrics?: string;
   isTrend?: boolean;
+  isPublished?: boolean;
   isExclusive?: boolean;
   executionDays: string; // "1-3 أيام"
   suitableFor: string[];

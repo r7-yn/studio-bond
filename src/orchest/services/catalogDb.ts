@@ -59,6 +59,7 @@ export async function loadCatalog(): Promise<Catalog> {
       categoryId: r.category_id ?? "",
       categoryLabel: catName.get(r.category_id ?? "") ?? "",
       coverUrl: r.cover_url || r.cover_image,
+      isPublished: r.is_published !== false,
       isTrend: r.is_trend,
       isExclusive: r.is_exclusive,
       executionDays: r.execution_days,
@@ -198,6 +199,44 @@ export interface AdminConfig {
 
 export function adminLoadConfig(csrf: string): Promise<AdminConfig> {
   return adminPost("/api/admin/config", csrf, {}) as Promise<AdminConfig>;
+}
+
+export async function adminLoadTracks(csrf: string, categories: Category[]): Promise<Track[]> {
+  const data = (await adminPost("/api/admin/catalog", csrf, {})) as {
+    tracks?: unknown[];
+  };
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  return (data.tracks ?? []).map((value) => {
+    const r = value as Record<string, unknown>;
+    const categoryId = String(r["category_id"] ?? "");
+    const track: Track = {
+      id: String(r["id"] ?? ""),
+      title: String(r["title"] ?? ""),
+      artist: String(r["artist"] ?? r["vocalist"] ?? ""),
+      code: String(r["code"] ?? ""),
+      duration: Number(r["duration_seconds"] ?? r["duration_sec"] ?? 0),
+      durationFormatted: String(r["duration_formatted"] ?? r["duration"] ?? "00:00"),
+      playsCount: 0,
+      likesCount: 0,
+      rhythm: (RHYTHMS as string[]).includes(String(r["rhythm"]))
+        ? (String(r["rhythm"]) as RhythmType)
+        : "بدون موسيقى",
+      categoryId,
+      categoryLabel: categoryNames.get(categoryId) ?? "",
+      coverUrl: String(r["cover_url"] ?? r["cover_image"] ?? ""),
+      isPublished: r["is_published"] !== false,
+      isTrend: r["is_trend"] === true,
+      isExclusive: r["is_exclusive"] === true,
+      executionDays: String(r["execution_days"] ?? ""),
+      suitableFor: Array.isArray(r["suitable_for"]) ? r["suitable_for"].map(String) : [],
+      createdAt: String(r["created_at"] ?? "").slice(0, 10),
+      description: String(r["description"] ?? ""),
+    };
+    if (typeof r["audio_url"] === "string" && r["audio_url"]) track.audioUrl = r["audio_url"];
+    if (typeof r["lyrics"] === "string" && r["lyrics"]) track.lyrics = r["lyrics"];
+    if (typeof r["audio_frequency"] === "number") track.audioFreq = r["audio_frequency"];
+    return track;
+  });
 }
 
 interface OrderRow {

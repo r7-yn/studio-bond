@@ -315,6 +315,7 @@ export type Database = {
           id: string
           is_exclusive: boolean
           is_featured: boolean | null
+          is_published: boolean
           is_trend: boolean
           likes_count: number | null
           lyrics: string | null
@@ -344,6 +345,7 @@ export type Database = {
           id: string
           is_exclusive?: boolean
           is_featured?: boolean | null
+          is_published?: boolean
           is_trend?: boolean
           likes_count?: number | null
           lyrics?: string | null
@@ -373,6 +375,7 @@ export type Database = {
           id?: string
           is_exclusive?: boolean
           is_featured?: boolean | null
+          is_published?: boolean
           is_trend?: boolean
           likes_count?: number | null
           lyrics?: string | null

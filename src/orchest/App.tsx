@@ -20,6 +20,7 @@ import {
   saveOrder,
   adminMutate,
   adminLoadConfig,
+  adminLoadTracks,
   adminLoadOrders,
   recordVisit,
   recordTrackPlay,
@@ -119,17 +120,19 @@ export default function App() {
   }, []);
 
   // Admin-only save; on failure show the reason and reload the real data.
-  const persist = async (body: Record<string, unknown>, success?: string) => {
+  const persist = async (body: Record<string, unknown>, success?: string): Promise<boolean> => {
     if (!adminCsrfToken) {
       toast.error("يلزم تسجيل دخول المدير");
-      return;
+      return false;
     }
     try {
       await adminMutate(adminCsrfToken, body);
       if (success) toast.success(success);
+      return true;
     } catch (e) {
       toast.error("لم يتم الحفظ", { description: e instanceof Error ? e.message : undefined });
       void refreshCatalog();
+      return false;
     }
   };
 
@@ -192,6 +195,13 @@ export default function App() {
       })
       .catch((e) => console.error("Orders load failed", e));
   }, [adminCsrfToken]);
+
+  useEffect(() => {
+    if (!adminCsrfToken) return;
+    adminLoadTracks(adminCsrfToken, categories)
+      .then(setTracks)
+      .catch((e) => console.error("Admin catalog load failed", e));
+  }, [adminCsrfToken, categories]);
 
   useEffect(() => {
     if (!adminCsrfToken) return;
@@ -321,6 +331,7 @@ export default function App() {
     setIsAdminAuthenticated(false);
     setAdminCsrfToken(null);
     setCurrentView("home");
+    void refreshCatalog();
   };
 
   // Ctrl/⌘K opens instant search from anywhere
@@ -435,13 +446,48 @@ export default function App() {
   };
 
   const handleUpdateTrack = (track: Track) => {
+    const previous = tracks.find((current) => current.id === track.id);
     setTracks((prev) => prev.map((t) => (t.id === track.id ? track : t)));
-    void persist({ action: "updateTrack", track }, "تم حفظ التعديلات");
+    void (async () => {
+      const saved = await persist({ action: "updateTrack", track }, "تم حفظ التعديلات");
+      if (saved && previous && previous.isPublished !== track.isPublished) {
+        await persist(
+          { action: "setTrackPublished", id: track.id, value: track.isPublished !== false },
+          track.isPublished === false ? "تم حفظ العمل كمسودة" : "تم نشر العمل",
+        );
+      }
+    })();
   };
 
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     void persist({ action: "deleteTrack", id });
+  };
+
+  const handleToggleTrackPublished = (id: string) => {
+    const track = tracks.find((t) => t.id === id);
+    if (!track) return;
+    const isPublished = track.isPublished === false;
+    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, isPublished } : t)));
+    void persist(
+      { action: "setTrackPublished", id, value: isPublished },
+      isPublished ? "تم نشر العمل" : "تم إخفاء العمل مؤقتاً",
+    );
+  };
+
+  const handleAddArtist = (artist: Artist) => {
+    setArtists((prev) => [...prev, artist]);
+    void persist({ action: "addArtist", artist }, "تمت إضافة الفنان");
+  };
+
+  const handleUpdateArtist = (artist: Artist) => {
+    setArtists((prev) => prev.map((current) => (current.id === artist.id ? artist : current)));
+    void persist({ action: "updateArtist", artist }, "تم حفظ بيانات الفنان");
+  };
+
+  const handleDeleteArtist = (id: string) => {
+    setArtists((prev) => prev.filter((artist) => artist.id !== id));
+    void persist({ action: "deleteArtist", id }, "تم حذف الفنان");
   };
 
   const handleToggleTrend = (id: string) => {
@@ -916,6 +962,7 @@ export default function App() {
           (isAdminAuthenticated && adminCsrfToken ? (
             <AdminDashboard
               tracks={tracks}
+              artists={artists}
               orders={orders}
               categories={categories}
               offers={adminOffers}
@@ -926,7 +973,11 @@ export default function App() {
               onAddTrack={handleAddTrack}
               onUpdateTrack={handleUpdateTrack}
               onDeleteTrack={handleDeleteTrack}
+              onToggleTrackPublished={handleToggleTrackPublished}
               onToggleTrend={handleToggleTrend}
+              onAddArtist={handleAddArtist}
+              onUpdateArtist={handleUpdateArtist}
+              onDeleteArtist={handleDeleteArtist}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
               onReorderCategories={handleReorderCategories}
