@@ -712,6 +712,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Tab: Artists Management (إدارة الفنانين) */}
+      {activeTab === 'artists' && (
+        <div
+          className={`rounded-2xl border overflow-hidden ${
+            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+          }`}
+        >
+          <div className="p-4 border-b border-white/10 flex items-center justify-between">
+            <h3 className="font-bold text-base flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#D4AF37]" />
+              <span>فنانو الاستوديو المعتمدون</span>
+            </h3>
+            <button
+              onClick={() => {
+                resetArtistForm();
+                setIsArtistModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#c29f2f] text-black text-xs font-bold cursor-pointer shadow-md transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة فنان</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+            {artists.map((artist) => (
+              <div
+                key={artist.id}
+                className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                  isDark ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-black/10'
+                }`}
+              >
+                <img
+                  src={artist.avatar}
+                  alt={artist.name}
+                  className="w-12 h-12 rounded-full object-cover border border-[#D4AF37]/30 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm truncate">{artist.name}</span>
+                    {artist.isVerified && <CheckCircle className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />}
+                  </div>
+                  <p className="text-xs text-[#D4AF37]">{artist.role}</p>
+                  <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{artist.bio}</p>
+                  <p className="text-[10px] text-gray-500 mt-1">{artist.tracksCount ?? 0} عمل مسجل</p>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    onClick={() => openArtistEditModal(artist)}
+                    aria-label={`تعديل ${artist.name}`}
+                    className="p-1.5 rounded-lg text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteArtist(artist.id)}
+                    aria-label={`حذف ${artist.name}`}
+                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {artists.length === 0 && (
+              <p className="col-span-full p-8 text-center text-sm text-gray-400">
+                لا يوجد فنانون مسجلون بعد. أضف أول فنان من الزر أعلاه.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab: Categories Management (إدارة التصنيفات) */}
       {activeTab === 'categories' && (
         <div className="space-y-6">
@@ -1365,6 +1438,118 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-4"
               >
                 {editingTrackId ? 'حفظ التعديلات' : 'حفظ وإضافة العمل'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add/Edit Artist (إضافة أو تعديل فنان) */}
+      {isArtistModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+
+          <div
+            className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl max-h-[90vh] overflow-y-auto ${
+              isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+            }`}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+              <h3 className="font-bold text-lg">
+                {editingArtistId ? 'تعديل بيانات الفنان' : 'إضافة فنان جديد إلى الاستوديو'}
+              </h3>
+              <button
+                onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }}
+                aria-label="إغلاق النافذة"
+                className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveArtist} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">اسم الفنان</label>
+                  <input
+                    type="text"
+                    required
+                    value={artistName}
+                    onChange={(e) => setArtistName(e.target.value)}
+                    placeholder="مثال: محمد العتيبي"
+                    className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">الدور / اللقب</label>
+                  <input
+                    type="text"
+                    value={artistRole}
+                    onChange={(e) => setArtistRole(e.target.value)}
+                    placeholder="مثال: منشد رئيسي"
+                    className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1">نبذة تعريفية</label>
+                <textarea
+                  rows={3}
+                  value={artistBio}
+                  onChange={(e) => setArtistBio(e.target.value)}
+                  placeholder="نبذة قصيرة عن الفنان تظهر في صفحته..."
+                  className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1">الأنماط (افصل بينها بفاصلة)</label>
+                <input
+                  type="text"
+                  value={artistGenres}
+                  onChange={(e) => setArtistGenres(e.target.value)}
+                  placeholder="مثال: زفات، شيلات، أوركسترا"
+                  className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <ImageUploader
+                  currentImage={artistAvatar}
+                  onSelectImage={setArtistAvatar}
+                  theme={theme}
+                  label="الصورة الشخصية للفنان"
+                  recommendedAspect="موصى به: 400×400 بكسل"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="artistVerifiedCheck"
+                  checked={artistVerified}
+                  onChange={(e) => setArtistVerified(e.target.checked)}
+                  className="accent-[#D4AF37]"
+                />
+                <label htmlFor="artistVerifiedCheck" className="text-xs cursor-pointer">
+                  فنان موثّق (تظهر علامة التوثيق بجانب اسمه)
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-2"
+              >
+                {editingArtistId ? 'حفظ التعديلات' : 'حفظ وإضافة الفنان'}
               </button>
             </form>
           </div>
