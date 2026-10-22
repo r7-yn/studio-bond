@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import {
   Track,
+  Artist,
   OrderRequest,
   KPIData,
   ThemeMode,
@@ -51,6 +52,7 @@ import { OffersAdminPanel } from "./OffersAdminPanel";
 
 interface AdminDashboardProps {
   tracks: Track[];
+  artists: Artist[];
   orders: OrderRequest[];
   categories: Category[];
   offers: OfferPackage[];
@@ -63,6 +65,9 @@ interface AdminDashboardProps {
   onDeleteTrack: (id: string) => void;
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
+  onAddArtist: (artist: Artist) => void;
+  onUpdateArtist: (artist: Artist) => void;
+  onDeleteArtist: (id: string) => void;
   onDeleteCategory: (categoryId: string) => void;
   onReorderCategories: (fromId: string, toId: string) => void;
   onUpdateOrderStatus: (id: string, status: OrderRequest['status']) => void;
@@ -82,6 +87,7 @@ interface GeneratedSeo {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tracks,
+  artists,
   orders,
   categories,
   offers,
@@ -94,6 +100,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteTrack,
   onToggleTrend,
   onAddCategory,
+  onAddArtist,
+  onUpdateArtist,
+  onDeleteArtist,
   onDeleteCategory,
   onReorderCategories,
   onUpdateOrderStatus,
@@ -107,7 +116,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "tracks" | "categories" | "offers" | "orders" | "analytics" | "settings"
+    "tracks" | "artists" | "categories" | "offers" | "orders" | "analytics" | "settings"
   >("tracks");
   const [searchTerm, setSearchTerm] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
