@@ -398,15 +398,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      consume_public_request_slot: {
-        Args: {
-          p_ip_fingerprint: string
-          p_limit: number
-          p_request_kind: string
-          p_window_seconds: number
-        }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
