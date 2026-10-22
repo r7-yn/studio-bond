@@ -788,7 +788,12 @@ async function rejectPersistentPublicRateLimit(
       .update(getClientIp(req))
       .digest("hex");
     const db = await adminDb();
-    const { data, error } = await db.rpc("consume_public_request_slot", {
+    // The RPC is installed via migration and is not part of the generated types.
+    const rpc = db.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>;
+    const { data, error } = await rpc("consume_public_request_slot", {
       p_request_kind: kind,
       p_ip_fingerprint: fingerprint,
       p_limit: limit,
