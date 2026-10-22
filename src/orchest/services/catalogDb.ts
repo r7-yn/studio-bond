@@ -256,6 +256,17 @@ interface OrderRow {
   status: string;
 }
 
+export interface AdminOrdersQuery {
+  offset: number;
+  limit: number;
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  trackId?: string;
+  includeMetrics?: boolean;
+}
+
 export function recordVisit(): void {
   void publicPost("/api/public/events", { eventType: "visit" }).catch((error: unknown) => {
     console.error("Visit log failed", error instanceof Error ? error.message : "unknown error");
@@ -269,11 +280,21 @@ export function recordTrackPlay(trackId: string): void {
   });
 }
 
+export interface AdminOrdersResult {
+  orders: OrderRequest[];
+  total: number;
+  visits: number;
+  plays: number;
+  whatsappLeads: number;
+}
+
 export async function adminLoadOrders(
   csrf: string,
-): Promise<{ orders: OrderRequest[]; visits: number; plays: number; whatsappLeads: number }> {
-  const data = (await adminPost("/api/admin/orders", csrf, {})) as {
+  query: AdminOrdersQuery = { offset: 0, limit: 25, includeMetrics: true },
+): Promise<AdminOrdersResult> {
+  const data = (await adminPost("/api/admin/orders", csrf, { ...query })) as {
     orders?: OrderRow[];
+    totalOrders?: number;
     visits?: number;
     plays?: number;
     whatsappLeads?: number;
@@ -296,8 +317,32 @@ export async function adminLoadOrders(
   });
   return {
     orders,
+    total: data.totalOrders ?? 0,
     visits: data.visits ?? 0,
     plays: data.plays ?? 0,
     whatsappLeads: data.whatsappLeads ?? 0,
   };
+}
+
+export async function adminLoadAllOrders(
+  csrf: string,
+  filters: Omit<AdminOrdersQuery, "offset" | "limit">,
+): Promise<OrderRequest[]> {
+  const pageSize = 100;
+  const allOrders: OrderRequest[] = [];
+  let total = Number.POSITIVE_INFINITY;
+
+  while (allOrders.length < total) {
+    const result = await adminLoadOrders(csrf, {
+      ...filters,
+      offset: allOrders.length,
+      limit: pageSize,
+      includeMetrics: false,
+    });
+    allOrders.push(...result.orders);
+    total = result.total;
+    if (result.orders.length === 0) break;
+  }
+
+  return allOrders;
 }

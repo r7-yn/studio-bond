@@ -1,6 +1,6 @@
 import { adminHeaders } from '../utils/adminAuth';
 import { toast } from 'sonner';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Users, 
   Headphones, 
@@ -52,11 +52,16 @@ import {
 import { ImageUploader } from './ImageUploader';
 import { OffersAdminPanel } from "./OffersAdminPanel";
 import { uploadMediaFile } from '../services/mediaUpload';
+import { adminLoadAllOrders, type AdminOrdersQuery } from '../services/catalogDb';
+
+const ORDERS_PAGE_SIZE = 25;
 
 interface AdminDashboardProps {
   tracks: Track[];
   artists: Artist[];
   orders: OrderRequest[];
+  totalOrders: number;
+  onLoadOrders: (query: AdminOrdersQuery) => Promise<{ orders: OrderRequest[]; total: number }>;
   categories: Category[];
   offers: OfferPackage[];
   themeSettings: AppThemeSettings;
@@ -93,6 +98,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tracks,
   artists,
   orders,
+  totalOrders,
+  onLoadOrders,
   categories,
   offers,
   themeSettings,
@@ -126,6 +133,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<'الكل' | OrderRequest['status']>('الكل');
+  const [orderDateFrom, setOrderDateFrom] = useState('');
+  const [orderDateTo, setOrderDateTo] = useState('');
+  const [orderTrackFilter, setOrderTrackFilter] = useState('الكل');
+  const [orderPage, setOrderPage] = useState(0);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersExporting, setOrdersExporting] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'orders') return;
+    const timer = window.setTimeout(() => {
+      setOrdersLoading(true);
+      void onLoadOrders({
+        offset: orderPage * ORDERS_PAGE_SIZE,
+        limit: ORDERS_PAGE_SIZE,
+        search: orderSearch.trim(),
+        status: orderStatusFilter,
+        dateFrom: orderDateFrom,
+        dateTo: orderDateTo,
+        trackId: orderTrackFilter === 'الكل' ? '' : orderTrackFilter,
+      })
+        .catch((error) => {
+          toast.error('تعذر تحميل سجل الطلبات', {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        })
+        .finally(() => setOrdersLoading(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeTab,
+    onLoadOrders,
+    orderDateFrom,
+    orderDateTo,
+    orderPage,
+    orderSearch,
+    orderStatusFilter,
+    orderTrackFilter,
+  ]);
 
   // Settings & WhatsApp State
   const [inputWhatsApp, setInputWhatsApp] = useState(whatsappNumber);
@@ -177,18 +222,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     localStorage.setItem('orchest_last_backup', nowFormatted);
   };
 
-  const handleDownloadOrdersCSV = () => {
-    const csvContent = exportOrdersToCSV(orders);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    link.href = url;
-    link.setAttribute('download', `orchest_orders_${nowStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadOrdersCSV = async () => {
+    setOrdersExporting(true);
+    try {
+      const allMatchingOrders = await adminLoadAllOrders(csrfToken, {
+        search: orderSearch.trim(),
+        status: orderStatusFilter,
+        dateFrom: orderDateFrom,
+        dateTo: orderDateTo,
+        trackId: orderTrackFilter === 'الكل' ? '' : orderTrackFilter,
+      });
+      const csvContent = exportOrdersToCSV(allMatchingOrders);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.href = url;
+      link.setAttribute('download', `orchest_orders_${nowStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`تم تصدير ${allMatchingOrders.length} طلب`);
+    } catch (error) {
+      toast.error('تعذر تصدير سجل الطلبات', {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setOrdersExporting(false);
+    }
 
     const nowFormatted = new Date().toLocaleString('ar-SA');
     setLastBackupDate(nowFormatted);
@@ -462,17 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       t.code.includes(searchTerm)
   );
 
-  const filteredOrders = orders.filter((o) => {
-    if (orderStatusFilter !== 'الكل' && o.status !== orderStatusFilter) return false;
-    if (!orderSearch.trim()) return true;
-    const q = orderSearch.trim();
-    return (
-      o.clientNames.includes(q) ||
-      o.trackTitle.includes(q) ||
-      o.trackCode.includes(q) ||
-      (o.phone ?? '').includes(q)
-    );
-  });
+  const filteredOrders = orders;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -976,12 +1028,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <div className="p-4 border-b border-white/10 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <MessageCircle className="w-4 h-4 text-[#25D366]" />
                 <span>سجل طلبات واتساب الواردة من الزوار</span>
               </h3>
-              <span className="text-xs text-gray-400">{filteredOrders.length} من {orders.length} طلب</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">
+                  {totalOrders === 0 ? 0 : orderPage * ORDERS_PAGE_SIZE + 1}–{Math.min(orderPage * ORDERS_PAGE_SIZE + filteredOrders.length, totalOrders)} من {totalOrders} طلب
+                  {ordersLoading ? ' · جارٍ التحديث…' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadOrdersCSV()}
+                  disabled={ordersExporting}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#D4AF37] disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {ordersExporting ? 'جارٍ تجهيز التصدير…' : 'تصدير كل النتائج المطابقة'}
+                </button>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="relative flex-1 max-w-sm">
@@ -989,8 +1055,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="بحث بالاسم أو العمل أو الكود..."
+                  onChange={(e) => {
+                    setOrderPage(0);
+                    setOrderSearch(e.target.value);
+                  }}
+                  placeholder="بحث بالاسم أو رقم التواصل أو العمل أو الكود..."
                   className={`w-full pr-9 pl-4 py-2 text-sm rounded-xl border outline-none ${
                     isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
                   }`}
@@ -1001,7 +1070,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     key={st}
                     type="button"
-                    onClick={() => setOrderStatusFilter(st)}
+                    onClick={() => {
+                      setOrderPage(0);
+                      setOrderStatusFilter(st);
+                    }}
                     className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       orderStatusFilter === st
                         ? 'bg-[#D4AF37] text-black shadow-sm'
@@ -1014,6 +1086,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>من تاريخ</span>
+                <input
+                  type="date"
+                  value={orderDateFrom}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderDateFrom(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>إلى تاريخ</span>
+                <input
+                  type="date"
+                  value={orderDateTo}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderDateTo(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>العمل الصوتي</span>
+                <select
+                  value={orderTrackFilter}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderTrackFilter(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                >
+                  <option value="الكل">كل الأعمال</option>
+                  {tracks.map((track) => (
+                    <option key={track.id} value={track.id}>{track.title} · {track.code}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 
@@ -1087,6 +1207,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-white/10 p-3">
+            <button
+              type="button"
+              disabled={orderPage === 0 || ordersLoading}
+              onClick={() => setOrderPage((page) => Math.max(0, page - 1))}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              الطلبات الأحدث
+            </button>
+            <span className="text-xs text-gray-400">
+              صفحة {totalOrders === 0 ? 0 : orderPage + 1} من {Math.max(1, Math.ceil(totalOrders / ORDERS_PAGE_SIZE))}
+            </span>
+            <button
+              type="button"
+              disabled={(orderPage + 1) * ORDERS_PAGE_SIZE >= totalOrders || ordersLoading}
+              onClick={() => setOrderPage((page) => page + 1)}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              الطلبات الأقدم
+            </button>
           </div>
         </div>
       )}

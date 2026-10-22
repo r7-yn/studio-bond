@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
 import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
 import {
@@ -22,6 +22,7 @@ import {
   adminLoadConfig,
   adminLoadTracks,
   adminLoadOrders,
+  type AdminOrdersQuery,
   recordVisit,
   recordTrackPlay,
 } from "./services/catalogDb";
@@ -85,6 +86,8 @@ export default function App() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [orders, setOrders] = useState<OrderRequest[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const adminOrdersRequestId = useRef(0);
   const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(STUDIO_WHATSAPP_NUMBER);
   const [offers, setOffers] = useState<OfferPackage[]>([]);
@@ -180,21 +183,37 @@ export default function App() {
     }
   }, [adminCsrfToken]);
 
+  const loadAdminOrders = useCallback(
+    async (query: AdminOrdersQuery) => {
+      if (!adminCsrfToken) {
+        return { orders: [], total: 0, visits: 0, plays: 0, whatsappLeads: 0 };
+      }
+      const requestId = ++adminOrdersRequestId.current;
+      const result = await adminLoadOrders(adminCsrfToken, query);
+      if (requestId === adminOrdersRequestId.current) {
+        setOrders(result.orders);
+        setTotalOrders(result.total);
+        if (query.includeMetrics) {
+          setKpi((prev) => ({
+            ...prev,
+            totalVisits: result.visits,
+            totalStreams: result.plays,
+            whatsappLeads: result.whatsappLeads,
+            conversionRate: calculateConversionRate(result.whatsappLeads, result.visits),
+          }));
+        }
+      }
+      return result;
+    },
+    [adminCsrfToken],
+  );
+
   useEffect(() => {
     if (!adminCsrfToken) return;
-    adminLoadOrders(adminCsrfToken)
-      .then(({ orders: list, visits, plays, whatsappLeads }) => {
-        setOrders(list);
-        setKpi((prev) => ({
-          ...prev,
-          totalVisits: visits,
-          totalStreams: plays,
-          whatsappLeads,
-          conversionRate: calculateConversionRate(whatsappLeads, visits),
-        }));
-      })
-      .catch((e) => console.error("Orders load failed", e));
-  }, [adminCsrfToken]);
+    void loadAdminOrders({ offset: 0, limit: 25, includeMetrics: true }).catch((e) =>
+      console.error("Orders load failed", e),
+    );
+  }, [adminCsrfToken, loadAdminOrders]);
 
   useEffect(() => {
     if (!adminCsrfToken) return;
@@ -964,6 +983,7 @@ export default function App() {
               tracks={tracks}
               artists={artists}
               orders={orders}
+              totalOrders={totalOrders}
               categories={categories}
               offers={adminOffers}
               themeSettings={themeSettings}
@@ -978,6 +998,7 @@ export default function App() {
               onAddArtist={handleAddArtist}
               onUpdateArtist={handleUpdateArtist}
               onDeleteArtist={handleDeleteArtist}
+              onLoadOrders={loadAdminOrders}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
               onReorderCategories={handleReorderCategories}

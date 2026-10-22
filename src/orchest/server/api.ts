@@ -985,16 +985,61 @@ app.post("/api/admin/orders", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const db = await adminDb();
+  const body = req.body ?? {};
+  const requestedLimit = Math.floor(num(body["limit"]));
+  const limit = Math.max(1, Math.min(100, requestedLimit || 25));
+  const requestedOffset = Math.floor(num(body["offset"]));
+  const offset = Math.max(0, Math.min(2_000_000, requestedOffset));
+  const search = str(body["search"], 100).trim().replace(/[,%()_*"'\\]/g, " ").trim();
+  const status = str(body["status"], 20);
+  const trackId = str(body["trackId"], 100);
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const dateFrom = str(body["dateFrom"], 10);
+  const dateTo = str(body["dateTo"], 10);
+  const isValidDate = (value: string) => {
+    if (!datePattern.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const includeMetrics = body["includeMetrics"] === true;
+
+  let orderQuery = db
+    .from("order_logs")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (["جديد", "قيد التنفيذ", "مكتمل"].includes(status)) orderQuery = orderQuery.eq("status", status);
+  if (trackId) orderQuery = orderQuery.eq("track_id", trackId);
+  if (search) {
+    orderQuery = orderQuery.or(
+      `client_names.ilike.%${search}%,names.ilike.%${search}%,track_title.ilike.%${search}%,track_code.ilike.%${search}%,phone.ilike.%${search}%`,
+    );
+  }
+  if (isValidDate(dateFrom)) {
+    orderQuery = orderQuery.gte("created_at", `${dateFrom}T00:00:00.000Z`);
+  }
+  if (isValidDate(dateTo)) {
+    const nextDay = new Date(`${dateTo}T00:00:00.000Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    orderQuery = orderQuery.lt("created_at", nextDay.toISOString());
+  }
   const [orders, visits, plays, leads] = await Promise.all([
-    db.from("order_logs").select("*").order("created_at", { ascending: false }).limit(500),
-    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit"),
-    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play"),
-    db.from("order_logs").select("id", { count: "exact", head: true }),
+    orderQuery,
+    includeMetrics
+      ? db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit")
+      : Promise.resolve({ count: 0, error: null }),
+    includeMetrics
+      ? db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play")
+      : Promise.resolve({ count: 0, error: null }),
+    includeMetrics
+      ? db.from("order_logs").select("id", { count: "exact", head: true })
+      : Promise.resolve({ count: 0, error: null }),
   ]);
   const error = orders.error || visits.error || plays.error || leads.error;
   if (error) return res.status(500).json({ error: error.message });
   return res.json({
     orders: orders.data ?? [],
+    totalOrders: orders.count ?? 0,
     visits: visits.count ?? 0,
     plays: plays.count ?? 0,
     whatsappLeads: leads.count ?? 0,
