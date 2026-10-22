@@ -223,6 +223,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewCatImage('');
   };
 
+  const resetTrackForm = () => {
+    setNewTitle('');
+    setNewArtist('');
+    setNewDescription('');
+    setGeneratedSeo(null);
+    setNewCoverUrl('');
+    setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
+    setNewDuration('04:30');
+    setNewRhythm('بدون موسيقى');
+    setIsNewTrend(false);
+    setEditingTrackId(null);
+  };
+
+  const openEditModal = (track: Track) => {
+    setEditingTrackId(track.id);
+    setNewTitle(track.title);
+    setNewArtist(track.artist);
+    setNewCode(track.code);
+    setNewCategory(track.categoryId || categories[0]?.id || '');
+    setNewRhythm(track.rhythm);
+    setNewDuration(track.durationFormatted);
+    setNewCoverUrl(track.coverUrl);
+    setNewDescription(track.description);
+    setIsNewTrend(Boolean(track.isTrend));
+    setGeneratedSeo(null);
+    setIsAddModalOpen(true);
+  };
+
   const handleCreateTrack = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim()) {
@@ -230,16 +258,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
-    const durationSec = 270;
     const matchingCat = categories.find((c) => c.id === newCategory);
     const categoryLabel = matchingCat ? matchingCat.name : 'زفات';
+
+    if (editingTrackId) {
+      const existing = tracks.find((t) => t.id === editingTrackId);
+      if (!existing) {
+        toast.error('تعذر العثور على العمل المطلوب تعديله');
+        return;
+      }
+      const updated: Track = {
+        ...existing,
+        title: newTitle.trim(),
+        artist: newArtist.trim(),
+        code: newCode.trim(),
+        durationFormatted: newDuration,
+        rhythm: newRhythm,
+        categoryId: newCategory,
+        categoryLabel,
+        coverUrl: newCoverUrl.trim() || existing.coverUrl,
+        isTrend: isNewTrend,
+        description: newDescription.trim() || existing.description,
+      };
+      onUpdateTrack(updated);
+      setIsAddModalOpen(false);
+      resetTrackForm();
+      return;
+    }
 
     const created: Track = {
       id: `orc-${Date.now()}`,
       title: newTitle.trim(),
       artist: newArtist.trim(),
       code: newCode.trim(),
-      duration: durationSec,
+      duration: 270,
       durationFormatted: newDuration,
       playsCount: 0,
       likesCount: 0,
@@ -258,13 +310,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     onAddTrack(created);
     setIsAddModalOpen(false);
-    // Reset form
-    setNewTitle('');
-    setNewArtist('');
-    setNewDescription('');
-    setGeneratedSeo(null);
-    setNewCoverUrl('');
-    setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
+    resetTrackForm();
   };
 
   const filteredTracks = tracks.filter(
@@ -307,7 +353,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>إضافة تصنيف جديد</span>
           </button>
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              resetTrackForm();
+              setIsAddModalOpen(true);
+            }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D4AF37] hover:bg-[#c29f2f] text-black shadow-lg cursor-pointer active:scale-95 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -545,6 +594,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openEditModal(tr)}
+                          aria-label={`تعديل ${tr.title}`}
+                          className="p-1.5 rounded-lg text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => onDeleteTrack(tr.id)}
                           aria-label={`حذف ${tr.title}`}
