@@ -322,6 +322,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       t.code.includes(searchTerm)
   );
 
+  const filteredOrders = orders.filter((o) => {
+    if (orderStatusFilter !== 'الكل' && o.status !== orderStatusFilter) return false;
+    if (!orderSearch.trim()) return true;
+    const q = orderSearch.trim();
+    return (
+      o.clientNames.includes(q) ||
+      o.trackTitle.includes(q) ||
+      o.trackCode.includes(q) ||
+      (o.phone ?? '').includes(q)
+    );
+  });
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
       {/* Top Bar */}
@@ -830,6 +842,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                   </tr>
                 ))}
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-sm text-gray-400">
+                      لا توجد طلبات مطابقة للبحث أو الفلتر الحالي.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
