@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
 import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
 import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
 import {
@@ -20,7 +20,10 @@ import {
   saveOrder,
   adminMutate,
   adminLoadConfig,
+  adminLoadTracks,
   adminLoadOrders,
+  type AdminOrdersQuery,
+  loadCatalogTrackPage,
   recordVisit,
   recordTrackPlay,
 } from "./services/catalogDb";
@@ -32,7 +35,11 @@ import { TrackCard } from "./components/TrackCard";
 import { TrackDetailsView } from "./components/TrackDetailsView";
 import { StickyAudioPlayer } from "./components/StickyAudioPlayer";
 import { OrderModal } from "./components/OrderModal";
-import { AdminDashboard } from "./components/AdminDashboard";
+const AdminDashboard = lazy(() =>
+  import("./components/AdminDashboard").then((module) => ({
+    default: module.AdminDashboard,
+  })),
+);
 import { SearchModal } from "./components/SearchModal";
 import { MobileBottomNav } from "./components/MobileBottomNav";
 import { AiConciergeModal } from "./components/AiConciergeModal";
@@ -80,10 +87,14 @@ export default function App() {
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracksTotal, setTracksTotal] = useState(0);
+  const [isLoadingMoreTracks, setIsLoadingMoreTracks] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [orders, setOrders] = useState<OrderRequest[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const adminOrdersRequestId = useRef(0);
   const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(STUDIO_WHATSAPP_NUMBER);
   const [offers, setOffers] = useState<OfferPackage[]>([]);
@@ -101,6 +112,7 @@ export default function App() {
     try {
       const c = await loadCatalog();
       setTracks(c.tracks);
+      setTracksTotal(c.tracksTotal);
       setCategories(c.categories);
       setArtists(c.artists);
       setOffers(c.offers);
@@ -119,17 +131,19 @@ export default function App() {
   }, []);
 
   // Admin-only save; on failure show the reason and reload the real data.
-  const persist = async (body: Record<string, unknown>, success?: string) => {
+  const persist = async (body: Record<string, unknown>, success?: string): Promise<boolean> => {
     if (!adminCsrfToken) {
       toast.error("يلزم تسجيل دخول المدير");
-      return;
+      return false;
     }
     try {
       await adminMutate(adminCsrfToken, body);
       if (success) toast.success(success);
+      return true;
     } catch (e) {
       toast.error("لم يتم الحفظ", { description: e instanceof Error ? e.message : undefined });
       void refreshCatalog();
+      return false;
     }
   };
 
@@ -177,21 +191,65 @@ export default function App() {
     }
   }, [adminCsrfToken]);
 
+  const loadAdminOrders = useCallback(
+    async (query: AdminOrdersQuery) => {
+      if (!adminCsrfToken) {
+        return { orders: [], total: 0, visits: 0, plays: 0, whatsappLeads: 0 };
+      }
+      const requestId = ++adminOrdersRequestId.current;
+      const result = await adminLoadOrders(adminCsrfToken, query);
+      if (requestId === adminOrdersRequestId.current) {
+        setOrders(result.orders);
+        setTotalOrders(result.total);
+        if (query.includeMetrics) {
+          setKpi((prev) => ({
+            ...prev,
+            totalVisits: result.visits,
+            totalStreams: result.plays,
+            whatsappLeads: result.whatsappLeads,
+            conversionRate: calculateConversionRate(result.whatsappLeads, result.visits),
+          }));
+        }
+      }
+      return result;
+    },
+    [adminCsrfToken],
+  );
+
   useEffect(() => {
     if (!adminCsrfToken) return;
-    adminLoadOrders(adminCsrfToken)
-      .then(({ orders: list, visits, plays, whatsappLeads }) => {
-        setOrders(list);
-        setKpi((prev) => ({
-          ...prev,
-          totalVisits: visits,
-          totalStreams: plays,
-          whatsappLeads,
-          conversionRate: calculateConversionRate(whatsappLeads, visits),
-        }));
+    void loadAdminOrders({ offset: 0, limit: 25, includeMetrics: true }).catch((e) =>
+      console.error("Orders load failed", e),
+    );
+  }, [adminCsrfToken, loadAdminOrders]);
+
+  useEffect(() => {
+    if (!adminCsrfToken) return;
+    adminLoadTracks(adminCsrfToken, categories)
+      .then((adminTracks) => {
+        setTracks(adminTracks);
+        setTracksTotal(adminTracks.length);
       })
-      .catch((e) => console.error("Orders load failed", e));
-  }, [adminCsrfToken]);
+      .catch((e) => console.error("Admin catalog load failed", e));
+  }, [adminCsrfToken, categories]);
+
+  const handleLoadMoreTracks = async () => {
+    if (isLoadingMoreTracks || tracks.length >= tracksTotal || isAdminAuthenticated) return;
+    setIsLoadingMoreTracks(true);
+    try {
+      const nextTracks = await loadCatalogTrackPage(tracks.length, categories);
+      setTracks((current) => {
+        const ids = new Set(current.map((track) => track.id));
+        return [...current, ...nextTracks.filter((track) => !ids.has(track.id))];
+      });
+    } catch (error) {
+      toast.error("تعذر تحميل المزيد من الأعمال", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsLoadingMoreTracks(false);
+    }
+  };
 
   useEffect(() => {
     if (!adminCsrfToken) return;
@@ -321,6 +379,7 @@ export default function App() {
     setIsAdminAuthenticated(false);
     setAdminCsrfToken(null);
     setCurrentView("home");
+    void refreshCatalog();
   };
 
   // Ctrl/⌘K opens instant search from anywhere
@@ -435,13 +494,63 @@ export default function App() {
   };
 
   const handleUpdateTrack = (track: Track) => {
+    const previous = tracks.find((current) => current.id === track.id);
     setTracks((prev) => prev.map((t) => (t.id === track.id ? track : t)));
-    void persist({ action: "updateTrack", track }, "تم حفظ التعديلات");
+    void (async () => {
+      const saved = await persist({ action: "updateTrack", track }, "تم حفظ التعديلات");
+      if (saved && previous && previous.isPublished !== track.isPublished) {
+        await persist(
+          { action: "setTrackPublished", id: track.id, value: track.isPublished !== false },
+          track.isPublished === false ? "تم حفظ العمل كمسودة" : "تم نشر العمل",
+        );
+      }
+    })();
+  };
+
+  const handleAddArtist = (artist: Artist) => {
+    setArtists((prev) => [...prev, artist]);
+    void persist({ action: "addArtist", artist }, "تم حفظ الفنان");
+  };
+
+  const handleUpdateArtist = (artist: Artist) => {
+    setArtists((prev) => prev.map((a) => (a.id === artist.id ? artist : a)));
+    void persist({ action: "updateArtist", artist }, "تم حفظ التعديلات");
+  };
+
+  const handleDeleteArtist = (id: string) => {
+    setArtists((prev) => prev.filter((a) => a.id !== id));
+    void persist({ action: "deleteArtist", id });
   };
 
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     void persist({ action: "deleteTrack", id });
+  };
+
+  const handleToggleTrackPublished = (id: string) => {
+    const track = tracks.find((t) => t.id === id);
+    if (!track) return;
+    const isPublished = track.isPublished === false;
+    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, isPublished } : t)));
+    void persist(
+      { action: "setTrackPublished", id, value: isPublished },
+      isPublished ? "تم نشر العمل" : "تم إخفاء العمل مؤقتاً",
+    );
+  };
+
+  const handleAddArtist = (artist: Artist) => {
+    setArtists((prev) => [...prev, artist]);
+    void persist({ action: "addArtist", artist }, "تمت إضافة الفنان");
+  };
+
+  const handleUpdateArtist = (artist: Artist) => {
+    setArtists((prev) => prev.map((current) => (current.id === artist.id ? artist : current)));
+    void persist({ action: "updateArtist", artist }, "تم حفظ بيانات الفنان");
+  };
+
+  const handleDeleteArtist = (id: string) => {
+    setArtists((prev) => prev.filter((artist) => artist.id !== id));
+    void persist({ action: "deleteArtist", id }, "تم حذف الفنان");
   };
 
   const handleToggleTrend = (id: string) => {
@@ -521,14 +630,6 @@ export default function App() {
               onViewAll={() => setCurrentView("catalog")}
             />
 
-            <OffersSection
-              offers={offers}
-              enabled={themeSettings.enableOffersSection}
-              onContact={(message) => {
-                window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
-              }}
-            />
-
             {/* Trending Tracks Section (الأعمال الرائجة) */}
             <section id="trending-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="flex items-center justify-between mb-6">
@@ -550,14 +651,14 @@ export default function App() {
                   onClick={() => setCurrentView("catalog")}
                   className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#D4AF37] hover:underline cursor-pointer"
                 >
-                  <span>عرض الكل ({tracks.length})</span>
+                  <span>عرض الكل ({tracksTotal})</span>
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Grid of Track Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                {trendingTracks.map((track) => (
+                {trendingTracks.slice(0, 4).map((track) => (
                   <TrackCard
                     key={track.id}
                     track={track}
@@ -585,6 +686,14 @@ export default function App() {
                 ))}
               </div>
             </section>
+
+            <OffersSection
+              offers={offers}
+              enabled={themeSettings.enableOffersSection}
+              onContact={(message) => {
+                window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
+              }}
+            />
 
             {/* Artists Showcase Section (فنانو أوركست) */}
             <ArtistsSection
@@ -674,7 +783,7 @@ export default function App() {
                 <p
                   className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
                 >
-                  استمع واكتشف {tracks.length} عملاً صوتياً متوفراً للطلب
+                  استمع واكتشف الأعمال الصوتية — تم تحميل {tracks.length} من {tracksTotal} عملاً
                 </p>
               </div>
 
@@ -710,7 +819,7 @@ export default function App() {
                       : "bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50"
                 }`}
               >
-                الكل ({tracks.length})
+                الكل ({tracksTotal})
               </button>
 
               {categories.map((cat) => (
@@ -775,6 +884,21 @@ export default function App() {
                     theme={theme}
                   />
                 ))}
+              </div>
+            )}
+            {tracks.length < tracksTotal && (
+              <div className="mt-8 text-center">
+                <p className="mb-3 text-xs text-gray-500">
+                  معروض {tracks.length} من {tracksTotal} عملاً
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreTracks()}
+                  disabled={isLoadingMoreTracks}
+                  className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black transition-opacity disabled:opacity-50"
+                >
+                  {isLoadingMoreTracks ? "جارٍ تحميل الأعمال…" : "تحميل المزيد من الأعمال"}
+                </button>
               </div>
             )}
           </div>
@@ -914,9 +1038,18 @@ export default function App() {
         {/* VIEW 7: ADMIN DASHBOARD */}
         {currentView === "admin" &&
           (isAdminAuthenticated && adminCsrfToken ? (
+            <Suspense
+              fallback={
+                <div className="mx-auto max-w-7xl px-4 py-12 text-center text-sm text-gray-500" role="status">
+                  جارٍ تحميل لوحة الإدارة…
+                </div>
+              }
+            >
             <AdminDashboard
               tracks={tracks}
+              artists={artists}
               orders={orders}
+              totalOrders={totalOrders}
               categories={categories}
               offers={adminOffers}
               themeSettings={themeSettings}
@@ -925,8 +1058,17 @@ export default function App() {
               onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
               onAddTrack={handleAddTrack}
               onUpdateTrack={handleUpdateTrack}
+              artists={artists}
+              onAddArtist={handleAddArtist}
+              onUpdateArtist={handleUpdateArtist}
+              onDeleteArtist={handleDeleteArtist}
               onDeleteTrack={handleDeleteTrack}
+              onToggleTrackPublished={handleToggleTrackPublished}
               onToggleTrend={handleToggleTrend}
+              onAddArtist={handleAddArtist}
+              onUpdateArtist={handleUpdateArtist}
+              onDeleteArtist={handleDeleteArtist}
+              onLoadOrders={loadAdminOrders}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}
               onReorderCategories={handleReorderCategories}
@@ -937,6 +1079,7 @@ export default function App() {
               onBackToStore={() => setCurrentView("home")}
               onRefreshConfig={refreshAdminConfig}
             />
+            </Suspense>
           ) : (
             <AdminLogin
               theme={theme}
