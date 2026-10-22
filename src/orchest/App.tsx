@@ -590,14 +590,6 @@ export default function App() {
               onViewAll={() => setCurrentView("catalog")}
             />
 
-            <OffersSection
-              offers={offers}
-              enabled={themeSettings.enableOffersSection}
-              onContact={(message) => {
-                window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
-              }}
-            />
-
             {/* Trending Tracks Section (الأعمال الرائجة) */}
             <section id="trending-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="flex items-center justify-between mb-6">
@@ -626,7 +618,7 @@ export default function App() {
 
               {/* Grid of Track Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                {trendingTracks.map((track) => (
+                {trendingTracks.slice(0, 4).map((track) => (
                   <TrackCard
                     key={track.id}
                     track={track}
@@ -654,6 +646,14 @@ export default function App() {
                 ))}
               </div>
             </section>
+
+            <OffersSection
+              offers={offers}
+              enabled={themeSettings.enableOffersSection}
+              onContact={(message) => {
+                window.open(generateWhatsAppUrl(whatsappNumber, message), "_blank");
+              }}
+            />
 
             {/* Artists Showcase Section (فنانو أوركست) */}
             <ArtistsSection
