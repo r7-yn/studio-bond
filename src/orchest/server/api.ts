@@ -1158,6 +1158,42 @@ app.post("/api/admin/mutate", async (req, res) => {
         .update({ is_trend: Boolean(b["value"]) })
         .eq("id", str(b["id"], 100)));
       break;
+    case "addArtist": {
+      const a = (b["artist"] ?? {}) as Record<string, unknown>;
+      ({ error } = await db.from("artists").insert({
+        id: str(a["id"], 100),
+        name: str(a["name"], 200),
+        role: str(a["role"], 200),
+        bio: str(a["bio"]),
+        avatar: str(a["avatar"]),
+        cover_image: str(a["coverImage"]) || null,
+        genres: Array.isArray(a["genres"]) ? a["genres"].map((x) => str(x, 100)) : [],
+        is_verified: Boolean(a["isVerified"]),
+      }));
+      break;
+    }
+    case "updateArtist": {
+      const a = (b["artist"] ?? {}) as Record<string, unknown>;
+      const id = str(a["id"], 100);
+      if (!id) return res.status(400).json({ error: "معرّف الفنان مطلوب" });
+      ({ error } = await db
+        .from("artists")
+        .update({
+          name: str(a["name"], 200),
+          role: str(a["role"], 200),
+          bio: str(a["bio"]),
+          avatar: str(a["avatar"]),
+          cover_image: str(a["coverImage"]) || null,
+          genres: Array.isArray(a["genres"]) ? a["genres"].map((x) => str(x, 100)) : [],
+          is_verified: Boolean(a["isVerified"]),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id));
+      break;
+    }
+    case "deleteArtist":
+      ({ error } = await db.from("artists").delete().eq("id", str(b["id"], 100)));
+      break;
     case "addCategory": {
       const c = (b["category"] ?? {}) as Record<string, unknown>;
       const id = str(c["id"], 100);
