@@ -23,6 +23,7 @@ import {
   adminLoadTracks,
   adminLoadOrders,
   type AdminOrdersQuery,
+  loadCatalogTrackPage,
   recordVisit,
   recordTrackPlay,
 } from "./services/catalogDb";
@@ -86,6 +87,8 @@ export default function App() {
   const [adminCsrfToken, setAdminCsrfToken] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracksTotal, setTracksTotal] = useState(0);
+  const [isLoadingMoreTracks, setIsLoadingMoreTracks] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
@@ -109,6 +112,7 @@ export default function App() {
     try {
       const c = await loadCatalog();
       setTracks(c.tracks);
+      setTracksTotal(c.tracksTotal);
       setCategories(c.categories);
       setArtists(c.artists);
       setOffers(c.offers);
@@ -222,9 +226,30 @@ export default function App() {
   useEffect(() => {
     if (!adminCsrfToken) return;
     adminLoadTracks(adminCsrfToken, categories)
-      .then(setTracks)
+      .then((adminTracks) => {
+        setTracks(adminTracks);
+        setTracksTotal(adminTracks.length);
+      })
       .catch((e) => console.error("Admin catalog load failed", e));
   }, [adminCsrfToken, categories]);
+
+  const handleLoadMoreTracks = async () => {
+    if (isLoadingMoreTracks || tracks.length >= tracksTotal || isAdminAuthenticated) return;
+    setIsLoadingMoreTracks(true);
+    try {
+      const nextTracks = await loadCatalogTrackPage(tracks.length, categories);
+      setTracks((current) => {
+        const ids = new Set(current.map((track) => track.id));
+        return [...current, ...nextTracks.filter((track) => !ids.has(track.id))];
+      });
+    } catch (error) {
+      toast.error("تعذر تحميل المزيد من الأعمال", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsLoadingMoreTracks(false);
+    }
+  };
 
   useEffect(() => {
     if (!adminCsrfToken) return;
@@ -611,7 +636,7 @@ export default function App() {
                   onClick={() => setCurrentView("catalog")}
                   className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#D4AF37] hover:underline cursor-pointer"
                 >
-                  <span>عرض الكل ({tracks.length})</span>
+                  <span>عرض الكل ({tracksTotal})</span>
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
@@ -743,7 +768,7 @@ export default function App() {
                 <p
                   className={`text-xs sm:text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}
                 >
-                  استمع واكتشف {tracks.length} عملاً صوتياً متوفراً للطلب
+                  استمع واكتشف الأعمال الصوتية — تم تحميل {tracks.length} من {tracksTotal} عملاً
                 </p>
               </div>
 
@@ -779,7 +804,7 @@ export default function App() {
                       : "bg-white border border-black/10 text-gray-700 hover:border-[#B89728]/50"
                 }`}
               >
-                الكل ({tracks.length})
+                الكل ({tracksTotal})
               </button>
 
               {categories.map((cat) => (
@@ -844,6 +869,21 @@ export default function App() {
                     theme={theme}
                   />
                 ))}
+              </div>
+            )}
+            {tracks.length < tracksTotal && (
+              <div className="mt-8 text-center">
+                <p className="mb-3 text-xs text-gray-500">
+                  معروض {tracks.length} من {tracksTotal} عملاً
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreTracks()}
+                  disabled={isLoadingMoreTracks}
+                  className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black transition-opacity disabled:opacity-50"
+                >
+                  {isLoadingMoreTracks ? "جارٍ تحميل الأعمال…" : "تحميل المزيد من الأعمال"}
+                </button>
               </div>
             )}
           </div>

@@ -14,6 +14,7 @@ import { adminHeaders } from "../utils/adminAuth";
 
 export interface Catalog {
   tracks: Track[];
+  tracksTotal: number;
   categories: Category[];
   artists: Artist[];
   whatsappNumber: string | null;
@@ -22,10 +23,16 @@ export interface Catalog {
 }
 
 const RHYTHMS: RhythmType[] = ["بدون موسيقى", "دفوف", "أوركسترا"];
+const PUBLIC_TRACKS_PAGE_SIZE = 40;
 
 export async function loadCatalog(): Promise<Catalog> {
   const [t, c, a, s, o, th] = await Promise.all([
-    supabase.from("tracks").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("tracks")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(0, PUBLIC_TRACKS_PAGE_SIZE - 1),
     supabase.from("categories").select("*").order("sort_order"),
     supabase.from("artists").select("*").order("sort_order"),
     supabase.from("site_settings").select("key,value").eq("key", "whatsapp_number"),
@@ -83,7 +90,7 @@ export async function loadCatalog(): Promise<Catalog> {
       genres: Array.isArray(r.genres) ? (r.genres as unknown[]).map(String) : [],
       isVerified: r.is_verified,
       totalStreams: 0,
-      tracksCount: tracks.filter((track) => track.artist === r.name).length,
+      tracksCount: r.tracks_count ?? 0,
     };
     if (r.cover_image) artist.coverImage = r.cover_image;
     return artist;
@@ -128,12 +135,59 @@ export async function loadCatalog(): Promise<Catalog> {
     ...(row.end_date != null ? { endDate: row.end_date } : {}),
     createdAt: row.created_at,
   }));
-  const catalogCategories = categories.map((category) => ({
-    ...category,
-    count: tracks.filter((track) => track.categoryId === category.id).length,
-  }));
+  return {
+    tracks,
+    tracksTotal: t.count ?? tracks.length,
+    categories,
+    artists,
+    whatsappNumber,
+    offers,
+    themeSettings,
+  };
+}
 
-  return { tracks, categories: catalogCategories, artists, whatsappNumber, offers, themeSettings };
+export async function loadCatalogTrackPage(
+  offset: number,
+  categories: Category[],
+): Promise<Track[]> {
+  const pageSize = PUBLIC_TRACKS_PAGE_SIZE;
+  const { data, error } = await supabase
+    .from("tracks")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
+    .range(offset, offset + pageSize - 1);
+  if (error) throw new Error(error.message);
+
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  return (data ?? []).map((r) => {
+    const categoryId = r.category_id ?? "";
+    const track: Track = {
+      id: r.id,
+      title: r.title,
+      artist: r.artist || r.vocalist,
+      code: r.code,
+      duration: r.duration_seconds || r.duration_sec,
+      durationFormatted: r.duration_formatted || r.duration,
+      playsCount: 0,
+      likesCount: 0,
+      rhythm: (RHYTHMS as string[]).includes(r.rhythm) ? (r.rhythm as RhythmType) : "بدون موسيقى",
+      categoryId,
+      categoryLabel: categoryNames.get(categoryId) ?? "",
+      coverUrl: r.cover_url || r.cover_image,
+      isPublished: r.is_published !== false,
+      isTrend: r.is_trend,
+      isExclusive: r.is_exclusive,
+      executionDays: r.execution_days,
+      suitableFor: Array.isArray(r.suitable_for) ? (r.suitable_for as unknown[]).map(String) : [],
+      createdAt: (r.created_at ?? "").slice(0, 10),
+      description: r.description,
+    };
+    if (r.audio_url) track.audioUrl = r.audio_url;
+    if (r.lyrics) track.lyrics = r.lyrics;
+    if (r.audio_frequency != null) track.audioFreq = r.audio_frequency;
+    return track;
+  });
 }
 
 export interface OrderSubmissionGuard {
