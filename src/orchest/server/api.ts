@@ -788,7 +788,12 @@ async function rejectPersistentPublicRateLimit(
       .update(getClientIp(req))
       .digest("hex");
     const db = await adminDb();
-    const { data, error } = await db.rpc("consume_public_request_slot", {
+    // The RPC is installed via migration and is not part of the generated types.
+    const rpc = db.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>;
+    const { data, error } = await rpc("consume_public_request_slot", {
       p_request_kind: kind,
       p_ip_fingerprint: fingerprint,
       p_limit: limit,
@@ -1107,6 +1112,43 @@ app.post("/api/admin/mutate", async (req, res) => {
       }));
       break;
     }
+    case "updateTrack": {
+      const t = (b["track"] ?? {}) as Record<string, unknown>;
+      const id = str(t["id"], 100);
+      if (!id) return res.status(400).json({ error: "معرّف العمل مطلوب" });
+      const cover = str(t["coverUrl"]);
+      const dur = num(t["duration"]);
+      const fmt = str(t["durationFormatted"], 10);
+      const rhythm = str(t["rhythm"], 50);
+      ({ error } = await db
+        .from("tracks")
+        .update({
+          title: str(t["title"], 200),
+          vocalist: str(t["artist"], 200),
+          artist: str(t["artist"], 200),
+          code: str(t["code"], 50),
+          category_id: str(t["categoryId"], 100) || null,
+          duration: fmt,
+          duration_sec: dur,
+          duration_seconds: dur,
+          duration_formatted: fmt,
+          cover_image: cover,
+          cover_url: cover,
+          rhythm,
+          has_music: rhythm !== "بدون موسيقى",
+          is_trend: Boolean(t["isTrend"]),
+          is_exclusive: Boolean(t["isExclusive"]),
+          execution_days: str(t["executionDays"], 50),
+          suitable_for: Array.isArray(t["suitableFor"])
+            ? t["suitableFor"].map((x) => str(x, 100))
+            : [],
+          description: str(t["description"]),
+          lyrics: str(t["lyrics"], 5000) || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id));
+      break;
+    }
     case "deleteTrack":
       ({ error } = await db.from("tracks").delete().eq("id", str(b["id"], 100)));
       break;
@@ -1115,6 +1157,42 @@ app.post("/api/admin/mutate", async (req, res) => {
         .from("tracks")
         .update({ is_trend: Boolean(b["value"]) })
         .eq("id", str(b["id"], 100)));
+      break;
+    case "addArtist": {
+      const a = (b["artist"] ?? {}) as Record<string, unknown>;
+      ({ error } = await db.from("artists").insert({
+        id: str(a["id"], 100),
+        name: str(a["name"], 200),
+        role: str(a["role"], 200),
+        bio: str(a["bio"]),
+        avatar: str(a["avatar"]),
+        cover_image: str(a["coverImage"]) || null,
+        genres: Array.isArray(a["genres"]) ? a["genres"].map((x) => str(x, 100)) : [],
+        is_verified: Boolean(a["isVerified"]),
+      }));
+      break;
+    }
+    case "updateArtist": {
+      const a = (b["artist"] ?? {}) as Record<string, unknown>;
+      const id = str(a["id"], 100);
+      if (!id) return res.status(400).json({ error: "معرّف الفنان مطلوب" });
+      ({ error } = await db
+        .from("artists")
+        .update({
+          name: str(a["name"], 200),
+          role: str(a["role"], 200),
+          bio: str(a["bio"]),
+          avatar: str(a["avatar"]),
+          cover_image: str(a["coverImage"]) || null,
+          genres: Array.isArray(a["genres"]) ? a["genres"].map((x) => str(x, 100)) : [],
+          is_verified: Boolean(a["isVerified"]),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id));
+      break;
+    }
+    case "deleteArtist":
+      ({ error } = await db.from("artists").delete().eq("id", str(b["id"], 100)));
       break;
     case "addCategory": {
       const c = (b["category"] ?? {}) as Record<string, unknown>;

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import {
   Track,
+  Artist,
   OrderRequest,
   KPIData,
   ThemeMode,
@@ -51,6 +52,7 @@ import { OffersAdminPanel } from "./OffersAdminPanel";
 
 interface AdminDashboardProps {
   tracks: Track[];
+  artists: Artist[];
   orders: OrderRequest[];
   categories: Category[];
   offers: OfferPackage[];
@@ -59,9 +61,13 @@ interface AdminDashboardProps {
   whatsappNumber: string;
   onUpdateWhatsAppNumber: (newNumber: string) => void;
   onAddTrack: (newTrack: Track) => void;
+  onUpdateTrack: (track: Track) => void;
   onDeleteTrack: (id: string) => void;
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
+  onAddArtist: (artist: Artist) => void;
+  onUpdateArtist: (artist: Artist) => void;
+  onDeleteArtist: (id: string) => void;
   onDeleteCategory: (categoryId: string) => void;
   onReorderCategories: (fromId: string, toId: string) => void;
   onUpdateOrderStatus: (id: string, status: OrderRequest['status']) => void;
@@ -81,6 +87,7 @@ interface GeneratedSeo {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tracks,
+  artists,
   orders,
   categories,
   offers,
@@ -89,9 +96,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   whatsappNumber,
   onUpdateWhatsAppNumber,
   onAddTrack,
+  onUpdateTrack,
   onDeleteTrack,
   onToggleTrend,
   onAddCategory,
+  onAddArtist,
+  onUpdateArtist,
+  onDeleteArtist,
   onDeleteCategory,
   onReorderCategories,
   onUpdateOrderStatus,
@@ -102,11 +113,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRefreshConfig,
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "tracks" | "categories" | "offers" | "orders" | "analytics" | "settings"
+    "tracks" | "artists" | "categories" | "offers" | "orders" | "analytics" | "settings"
   >("tracks");
   const [searchTerm, setSearchTerm] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'الكل' | OrderRequest['status']>('الكل');
 
   // Settings & WhatsApp State
   const [inputWhatsApp, setInputWhatsApp] = useState(whatsappNumber);
@@ -191,6 +205,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const isDark = theme === 'dark';
 
+  // Artists management state
+  const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
+  const [editingArtistId, setEditingArtistId] = useState<string | null>(null);
+  const [artistName, setArtistName] = useState('');
+  const [artistRole, setArtistRole] = useState('');
+  const [artistBio, setArtistBio] = useState('');
+  const [artistAvatar, setArtistAvatar] = useState('');
+  const [artistGenres, setArtistGenres] = useState('');
+  const [artistVerified, setArtistVerified] = useState(false);
+
+  const resetArtistForm = () => {
+    setEditingArtistId(null);
+    setArtistName('');
+    setArtistRole('');
+    setArtistBio('');
+    setArtistAvatar('');
+    setArtistGenres('');
+    setArtistVerified(false);
+  };
+
+  const openArtistEditModal = (artist: Artist) => {
+    setEditingArtistId(artist.id);
+    setArtistName(artist.name);
+    setArtistRole(artist.role);
+    setArtistBio(artist.bio);
+    setArtistAvatar(artist.avatar);
+    setArtistGenres(artist.genres.join('، '));
+    setArtistVerified(Boolean(artist.isVerified));
+    setIsArtistModalOpen(true);
+  };
+
+  const handleSaveArtist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!artistName.trim()) {
+      toast.error('يرجى إدخال اسم الفنان');
+      return;
+    }
+    const genres = artistGenres
+      .split(/[،,]/)
+      .map((g) => g.trim())
+      .filter(Boolean);
+    const existing = editingArtistId ? artists.find((a) => a.id === editingArtistId) : undefined;
+    const artist: Artist = {
+      id: existing?.id ?? `artist-${Date.now()}`,
+      name: artistName.trim(),
+      role: artistRole.trim() || 'منشد',
+      bio: artistBio.trim(),
+      avatar: artistAvatar.trim() || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      genres,
+      isVerified: artistVerified,
+      totalStreams: existing?.totalStreams ?? 0,
+      tracksCount: existing?.tracksCount ?? 0,
+      ...(existing?.coverImage ? { coverImage: existing.coverImage } : {}),
+    };
+    if (existing) onUpdateArtist(artist);
+    else onAddArtist(artist);
+    setIsArtistModalOpen(false);
+    resetArtistForm();
+  };
+
   // Categories management state
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
@@ -220,6 +294,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewCatImage('');
   };
 
+  const resetTrackForm = () => {
+    setNewTitle('');
+    setNewArtist('');
+    setNewDescription('');
+    setGeneratedSeo(null);
+    setNewCoverUrl('');
+    setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
+    setNewDuration('04:30');
+    setNewRhythm('بدون موسيقى');
+    setIsNewTrend(false);
+    setEditingTrackId(null);
+  };
+
+  const openEditModal = (track: Track) => {
+    setEditingTrackId(track.id);
+    setNewTitle(track.title);
+    setNewArtist(track.artist);
+    setNewCode(track.code);
+    setNewCategory(track.categoryId || categories[0]?.id || '');
+    setNewRhythm(track.rhythm);
+    setNewDuration(track.durationFormatted);
+    setNewCoverUrl(track.coverUrl);
+    setNewDescription(track.description);
+    setIsNewTrend(Boolean(track.isTrend));
+    setGeneratedSeo(null);
+    setIsAddModalOpen(true);
+  };
+
   const handleCreateTrack = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim()) {
@@ -227,16 +329,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
-    const durationSec = 270;
     const matchingCat = categories.find((c) => c.id === newCategory);
     const categoryLabel = matchingCat ? matchingCat.name : 'زفات';
+
+    if (editingTrackId) {
+      const existing = tracks.find((t) => t.id === editingTrackId);
+      if (!existing) {
+        toast.error('تعذر العثور على العمل المطلوب تعديله');
+        return;
+      }
+      const updated: Track = {
+        ...existing,
+        title: newTitle.trim(),
+        artist: newArtist.trim(),
+        code: newCode.trim(),
+        durationFormatted: newDuration,
+        rhythm: newRhythm,
+        categoryId: newCategory,
+        categoryLabel,
+        coverUrl: newCoverUrl.trim() || existing.coverUrl,
+        isTrend: isNewTrend,
+        description: newDescription.trim() || existing.description,
+      };
+      onUpdateTrack(updated);
+      setIsAddModalOpen(false);
+      resetTrackForm();
+      return;
+    }
 
     const created: Track = {
       id: `orc-${Date.now()}`,
       title: newTitle.trim(),
       artist: newArtist.trim(),
       code: newCode.trim(),
-      duration: durationSec,
+      duration: 270,
       durationFormatted: newDuration,
       playsCount: 0,
       likesCount: 0,
@@ -255,13 +381,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     onAddTrack(created);
     setIsAddModalOpen(false);
-    // Reset form
-    setNewTitle('');
-    setNewArtist('');
-    setNewDescription('');
-    setGeneratedSeo(null);
-    setNewCoverUrl('');
-    setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
+    resetTrackForm();
   };
 
   const filteredTracks = tracks.filter(
@@ -270,6 +390,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       t.artist.includes(searchTerm) ||
       t.code.includes(searchTerm)
   );
+
+  const filteredOrders = orders.filter((o) => {
+    if (orderStatusFilter !== 'الكل' && o.status !== orderStatusFilter) return false;
+    if (!orderSearch.trim()) return true;
+    const q = orderSearch.trim();
+    return (
+      o.clientNames.includes(q) ||
+      o.trackTitle.includes(q) ||
+      o.trackCode.includes(q) ||
+      (o.phone ?? '').includes(q)
+    );
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -304,7 +436,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>إضافة تصنيف جديد</span>
           </button>
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              resetTrackForm();
+              setIsAddModalOpen(true);
+            }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D4AF37] hover:bg-[#c29f2f] text-black shadow-lg cursor-pointer active:scale-95 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -397,6 +532,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           إدارة الأعمال الصوتية ({tracks.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('artists')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'artists'
+              ? 'bg-[#D4AF37] text-black shadow-md'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>الفنانون ({artists.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('categories')}
@@ -543,6 +689,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => openEditModal(tr)}
+                          aria-label={`تعديل ${tr.title}`}
+                          className="p-1.5 rounded-lg text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => onDeleteTrack(tr.id)}
                           aria-label={`حذف ${tr.title}`}
                           className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
@@ -555,6 +708,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Artists Management (إدارة الفنانين) */}
+      {activeTab === 'artists' && (
+        <div
+          className={`rounded-2xl border overflow-hidden ${
+            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+          }`}
+        >
+          <div className="p-4 border-b border-white/10 flex items-center justify-between">
+            <h3 className="font-bold text-base flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#D4AF37]" />
+              <span>فنانو الاستوديو المعتمدون</span>
+            </h3>
+            <button
+              onClick={() => {
+                resetArtistForm();
+                setIsArtistModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#c29f2f] text-black text-xs font-bold cursor-pointer shadow-md transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة فنان</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+            {artists.map((artist) => (
+              <div
+                key={artist.id}
+                className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                  isDark ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-black/10'
+                }`}
+              >
+                <img
+                  src={artist.avatar}
+                  alt={artist.name}
+                  className="w-12 h-12 rounded-full object-cover border border-[#D4AF37]/30 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm truncate">{artist.name}</span>
+                    {artist.isVerified && <CheckCircle className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />}
+                  </div>
+                  <p className="text-xs text-[#D4AF37]">{artist.role}</p>
+                  <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{artist.bio}</p>
+                  <p className="text-[10px] text-gray-500 mt-1">{artist.tracksCount ?? 0} عمل مسجل</p>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    onClick={() => openArtistEditModal(artist)}
+                    aria-label={`تعديل ${artist.name}`}
+                    className="p-1.5 rounded-lg text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteArtist(artist.id)}
+                    aria-label={`حذف ${artist.name}`}
+                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {artists.length === 0 && (
+              <p className="col-span-full p-8 text-center text-sm text-gray-400">
+                لا يوجد فنانون مسجلون بعد. أضف أول فنان من الزر أعلاه.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -666,12 +892,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
           }`}
         >
-          <div className="p-4 border-b border-white/10 flex items-center justify-between">
-            <h3 className="font-bold text-base flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-[#25D366]" />
-              <span>سجل طلبات واتساب الواردة من الزوار</span>
-            </h3>
-            <span className="text-xs text-gray-400">{orders.length} طلب مسجل</span>
+          <div className="p-4 border-b border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                <span>سجل طلبات واتساب الواردة من الزوار</span>
+              </h3>
+              <span className="text-xs text-gray-400">{filteredOrders.length} من {orders.length} طلب</span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="بحث بالاسم أو العمل أو الكود..."
+                  className={`w-full pr-9 pl-4 py-2 text-sm rounded-xl border outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(['الكل', 'جديد', 'قيد التنفيذ', 'مكتمل'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setOrderStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      orderStatusFilter === st
+                        ? 'bg-[#D4AF37] text-black shadow-sm'
+                        : isDark
+                          ? 'bg-white/5 text-gray-400 hover:text-white'
+                          : 'bg-black/5 text-gray-500 hover:text-black'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -691,7 +951,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {orders.map((ord) => (
+                {filteredOrders.map((ord) => (
                   <tr
                     key={ord.id}
                     className={`transition-colors ${
@@ -735,6 +995,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                   </tr>
                 ))}
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-sm text-gray-400">
+                      لا توجد طلبات مطابقة للبحث أو الفلتر الحالي.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -961,7 +1228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Modal: Add New Track (إضافة عمل جديد) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setIsAddModalOpen(false)} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
 
           <div
             className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
@@ -969,9 +1236,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
-              <h3 className="font-bold text-lg">إضافة عمل صوتي جديد إلى أوركست</h3>
+              <h3 className="font-bold text-lg">
+                {editingTrackId ? 'تعديل بيانات العمل الصوتي' : 'إضافة عمل صوتي جديد إلى أوركست'}
+              </h3>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }}
                 aria-label="إغلاق النافذة"
                 className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
               >
@@ -1168,7 +1437,119 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="submit"
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-4"
               >
-                حفظ وإضافة العمل
+                {editingTrackId ? 'حفظ التعديلات' : 'حفظ وإضافة العمل'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add/Edit Artist (إضافة أو تعديل فنان) */}
+      {isArtistModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+
+          <div
+            className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl max-h-[90vh] overflow-y-auto ${
+              isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+            }`}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+              <h3 className="font-bold text-lg">
+                {editingArtistId ? 'تعديل بيانات الفنان' : 'إضافة فنان جديد إلى الاستوديو'}
+              </h3>
+              <button
+                onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }}
+                aria-label="إغلاق النافذة"
+                className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveArtist} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">اسم الفنان</label>
+                  <input
+                    type="text"
+                    required
+                    value={artistName}
+                    onChange={(e) => setArtistName(e.target.value)}
+                    placeholder="مثال: محمد العتيبي"
+                    className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">الدور / اللقب</label>
+                  <input
+                    type="text"
+                    value={artistRole}
+                    onChange={(e) => setArtistRole(e.target.value)}
+                    placeholder="مثال: منشد رئيسي"
+                    className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1">نبذة تعريفية</label>
+                <textarea
+                  rows={3}
+                  value={artistBio}
+                  onChange={(e) => setArtistBio(e.target.value)}
+                  placeholder="نبذة قصيرة عن الفنان تظهر في صفحته..."
+                  className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1">الأنماط (افصل بينها بفاصلة)</label>
+                <input
+                  type="text"
+                  value={artistGenres}
+                  onChange={(e) => setArtistGenres(e.target.value)}
+                  placeholder="مثال: زفات، شيلات، أوركسترا"
+                  className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <ImageUploader
+                  currentImage={artistAvatar}
+                  onSelectImage={setArtistAvatar}
+                  theme={theme}
+                  label="الصورة الشخصية للفنان"
+                  recommendedAspect="موصى به: 400×400 بكسل"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="artistVerifiedCheck"
+                  checked={artistVerified}
+                  onChange={(e) => setArtistVerified(e.target.checked)}
+                  className="accent-[#D4AF37]"
+                />
+                <label htmlFor="artistVerifiedCheck" className="text-xs cursor-pointer">
+                  فنان موثّق (تظهر علامة التوثيق بجانب اسمه)
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-2"
+              >
+                {editingArtistId ? 'حفظ التعديلات' : 'حفظ وإضافة الفنان'}
               </button>
             </form>
           </div>
