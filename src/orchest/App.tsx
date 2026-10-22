@@ -924,6 +924,7 @@ export default function App() {
               whatsappNumber={whatsappNumber}
               onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
               onAddTrack={handleAddTrack}
+              onUpdateTrack={handleUpdateTrack}
               onDeleteTrack={handleDeleteTrack}
               onToggleTrend={handleToggleTrend}
               onAddCategory={handleAddCategory}
