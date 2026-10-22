@@ -985,61 +985,16 @@ app.post("/api/admin/orders", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const db = await adminDb();
-  const body = req.body ?? {};
-  const requestedLimit = Math.floor(num(body["limit"]));
-  const limit = Math.max(1, Math.min(100, requestedLimit || 25));
-  const requestedOffset = Math.floor(num(body["offset"]));
-  const offset = Math.max(0, Math.min(2_000_000, requestedOffset));
-  const search = str(body["search"], 100).trim().replace(/[,%()_*"'\\]/g, " ").trim();
-  const status = str(body["status"], 20);
-  const trackId = str(body["trackId"], 100);
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-  const dateFrom = str(body["dateFrom"], 10);
-  const dateTo = str(body["dateTo"], 10);
-  const isValidDate = (value: string) => {
-    if (!datePattern.test(value)) return false;
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-  };
-  const includeMetrics = body["includeMetrics"] === true;
-
-  let orderQuery = db
-    .from("order_logs")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (["جديد", "قيد التنفيذ", "مكتمل"].includes(status)) orderQuery = orderQuery.eq("status", status);
-  if (trackId) orderQuery = orderQuery.eq("track_id", trackId);
-  if (search) {
-    orderQuery = orderQuery.or(
-      `client_names.ilike.%${search}%,names.ilike.%${search}%,track_title.ilike.%${search}%,track_code.ilike.%${search}%,phone.ilike.%${search}%`,
-    );
-  }
-  if (isValidDate(dateFrom)) {
-    orderQuery = orderQuery.gte("created_at", `${dateFrom}T00:00:00.000Z`);
-  }
-  if (isValidDate(dateTo)) {
-    const nextDay = new Date(`${dateTo}T00:00:00.000Z`);
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-    orderQuery = orderQuery.lt("created_at", nextDay.toISOString());
-  }
   const [orders, visits, plays, leads] = await Promise.all([
-    orderQuery,
-    includeMetrics
-      ? db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit")
-      : Promise.resolve({ count: 0, error: null }),
-    includeMetrics
-      ? db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play")
-      : Promise.resolve({ count: 0, error: null }),
-    includeMetrics
-      ? db.from("order_logs").select("id", { count: "exact", head: true })
-      : Promise.resolve({ count: 0, error: null }),
+    db.from("order_logs").select("*").order("created_at", { ascending: false }).limit(500),
+    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit"),
+    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play"),
+    db.from("order_logs").select("id", { count: "exact", head: true }),
   ]);
   const error = orders.error || visits.error || plays.error || leads.error;
   if (error) return res.status(500).json({ error: error.message });
   return res.json({
     orders: orders.data ?? [],
-    totalOrders: orders.count ?? 0,
     visits: visits.count ?? 0,
     plays: plays.count ?? 0,
     whatsappLeads: leads.count ?? 0,
@@ -1056,60 +1011,6 @@ app.post("/api/admin/config", async (req, res) => {
   if (offers.error || theme.error)
     return res.status(500).json({ error: offers.error?.message ?? theme.error?.message });
   return res.json({ offers: offers.data ?? [], theme: theme.data?.[0] ?? null });
-});
-
-app.post("/api/admin/catalog", async (req, res) => {
-  const session = requireAdmin(req, res);
-  if (!session || !requireCsrf(req, res, session)) return null;
-  const db = await adminDb();
-  const { data, error } = await db
-    .from("tracks")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json({ tracks: data ?? [] });
-});
-
-app.post("/api/admin/media-upload-url", async (req, res) => {
-  const session = requireAdmin(req, res);
-  if (!session || !requireCsrf(req, res, session)) return null;
-
-  const kind = str(req.body?.["kind"], 20);
-  const contentType = str(req.body?.["contentType"], 100).toLowerCase();
-  const size = num(req.body?.["size"]);
-  const extensionByType: Record<string, string> = {
-    "image/webp": "webp",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "audio/mpeg": "mp3",
-    "audio/mp4": "m4a",
-    "audio/aac": "aac",
-    "audio/wav": "wav",
-    "audio/x-wav": "wav",
-    "audio/ogg": "ogg",
-    "audio/webm": "webm",
-  };
-  const maxSize = kind === "image" ? 2 * 1024 * 1024 : 30 * 1024 * 1024;
-  if (
-    !["image", "audio"].includes(kind) ||
-    !extensionByType[contentType] ||
-    (kind === "image" && !contentType.startsWith("image/")) ||
-    (kind === "audio" && !contentType.startsWith("audio/")) ||
-    !Number.isSafeInteger(size) ||
-    size < 1 ||
-    size > maxSize
-  ) {
-    return res.status(400).json({ error: "نوع الملف أو حجمه غير مدعوم." });
-  }
-
-  const folder = kind === "image" ? "images" : "audio";
-  const path = `${folder}/${Date.now()}-${randomBytes(12).toString("hex")}.${extensionByType[contentType]}`;
-  const db = await adminDb();
-  const storage = db.storage.from("orchest-media");
-  const { data, error } = await storage.createSignedUploadUrl(path, { upsert: false });
-  if (error) return res.status(503).json({ error: "تعذر تجهيز مساحة رفع الملف." });
-  const { data: publicData } = storage.getPublicUrl(path);
-  return res.json({ signedUrl: data.signedUrl, publicUrl: publicData.publicUrl });
 });
 
 app.post("/api/admin/mutate", async (req, res) => {
@@ -1208,7 +1109,6 @@ app.post("/api/admin/mutate", async (req, res) => {
         description: str(t["description"]),
         audio_frequency: t["audioFreq"] == null ? null : num(t["audioFreq"]),
         lyrics: str(t["lyrics"], 5000) || null,
-        ...(t["isPublished"] === false ? { is_published: false } : {}),
       }));
       break;
     }
@@ -1232,7 +1132,6 @@ app.post("/api/admin/mutate", async (req, res) => {
           duration_sec: dur,
           duration_seconds: dur,
           duration_formatted: fmt,
-          audio_url: str(t["audioUrl"], 2000),
           cover_image: cover,
           cover_url: cover,
           rhythm,
@@ -1257,12 +1156,6 @@ app.post("/api/admin/mutate", async (req, res) => {
       ({ error } = await db
         .from("tracks")
         .update({ is_trend: Boolean(b["value"]) })
-        .eq("id", str(b["id"], 100)));
-      break;
-    case "setTrackPublished":
-      ({ error } = await db
-        .from("tracks")
-        .update({ is_published: Boolean(b["value"]), updated_at: new Date().toISOString() })
         .eq("id", str(b["id"], 100)));
       break;
     case "addArtist": {
@@ -1348,15 +1241,6 @@ app.post("/api/admin/mutate", async (req, res) => {
     default:
       return res.status(400).json({ error: "عملية غير معروفة" });
   }
-  if (error) {
-    const migrationRequired = error.message.includes("is_published");
-    return res
-      .status(migrationRequired ? 503 : 500)
-      .json({
-        error: migrationRequired
-          ? "لتفعيل المسودات والإخفاء، يلزم تطبيق ترحيل حالة النشر على قاعدة البيانات."
-          : error.message,
-      });
-  }
+  if (error) return res.status(500).json({ error: error.message });
   return res.json({ ok: true });
 });

@@ -507,6 +507,21 @@ export default function App() {
     })();
   };
 
+  const handleAddArtist = (artist: Artist) => {
+    setArtists((prev) => [...prev, artist]);
+    void persist({ action: "addArtist", artist }, "تم حفظ الفنان");
+  };
+
+  const handleUpdateArtist = (artist: Artist) => {
+    setArtists((prev) => prev.map((a) => (a.id === artist.id ? artist : a)));
+    void persist({ action: "updateArtist", artist }, "تم حفظ التعديلات");
+  };
+
+  const handleDeleteArtist = (id: string) => {
+    setArtists((prev) => prev.filter((a) => a.id !== id));
+    void persist({ action: "deleteArtist", id });
+  };
+
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     void persist({ action: "deleteTrack", id });
@@ -1043,6 +1058,10 @@ export default function App() {
               onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
               onAddTrack={handleAddTrack}
               onUpdateTrack={handleUpdateTrack}
+              artists={artists}
+              onAddArtist={handleAddArtist}
+              onUpdateArtist={handleUpdateArtist}
+              onDeleteArtist={handleDeleteArtist}
               onDeleteTrack={handleDeleteTrack}
               onToggleTrackPublished={handleToggleTrackPublished}
               onToggleTrend={handleToggleTrend}

@@ -14,7 +14,6 @@ import { adminHeaders } from "../utils/adminAuth";
 
 export interface Catalog {
   tracks: Track[];
-  tracksTotal: number;
   categories: Category[];
   artists: Artist[];
   whatsappNumber: string | null;
@@ -23,16 +22,10 @@ export interface Catalog {
 }
 
 const RHYTHMS: RhythmType[] = ["بدون موسيقى", "دفوف", "أوركسترا"];
-const PUBLIC_TRACKS_PAGE_SIZE = 40;
 
 export async function loadCatalog(): Promise<Catalog> {
   const [t, c, a, s, o, th] = await Promise.all([
-    supabase
-      .from("tracks")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(0, PUBLIC_TRACKS_PAGE_SIZE - 1),
+    supabase.from("tracks").select("*").order("created_at", { ascending: false }),
     supabase.from("categories").select("*").order("sort_order"),
     supabase.from("artists").select("*").order("sort_order"),
     supabase.from("site_settings").select("key,value").eq("key", "whatsapp_number"),
@@ -66,7 +59,6 @@ export async function loadCatalog(): Promise<Catalog> {
       categoryId: r.category_id ?? "",
       categoryLabel: catName.get(r.category_id ?? "") ?? "",
       coverUrl: r.cover_url || r.cover_image,
-      isPublished: r.is_published !== false,
       isTrend: r.is_trend,
       isExclusive: r.is_exclusive,
       executionDays: r.execution_days,
@@ -90,7 +82,7 @@ export async function loadCatalog(): Promise<Catalog> {
       genres: Array.isArray(r.genres) ? (r.genres as unknown[]).map(String) : [],
       isVerified: r.is_verified,
       totalStreams: 0,
-      tracksCount: r.tracks_count ?? 0,
+      tracksCount: tracks.filter((track) => track.artist === r.name).length,
     };
     if (r.cover_image) artist.coverImage = r.cover_image;
     return artist;
@@ -135,59 +127,12 @@ export async function loadCatalog(): Promise<Catalog> {
     ...(row.end_date != null ? { endDate: row.end_date } : {}),
     createdAt: row.created_at,
   }));
-  return {
-    tracks,
-    tracksTotal: t.count ?? tracks.length,
-    categories,
-    artists,
-    whatsappNumber,
-    offers,
-    themeSettings,
-  };
-}
+  const catalogCategories = categories.map((category) => ({
+    ...category,
+    count: tracks.filter((track) => track.categoryId === category.id).length,
+  }));
 
-export async function loadCatalogTrackPage(
-  offset: number,
-  categories: Category[],
-): Promise<Track[]> {
-  const pageSize = PUBLIC_TRACKS_PAGE_SIZE;
-  const { data, error } = await supabase
-    .from("tracks")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: true })
-    .range(offset, offset + pageSize - 1);
-  if (error) throw new Error(error.message);
-
-  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
-  return (data ?? []).map((r) => {
-    const categoryId = r.category_id ?? "";
-    const track: Track = {
-      id: r.id,
-      title: r.title,
-      artist: r.artist || r.vocalist,
-      code: r.code,
-      duration: r.duration_seconds || r.duration_sec,
-      durationFormatted: r.duration_formatted || r.duration,
-      playsCount: 0,
-      likesCount: 0,
-      rhythm: (RHYTHMS as string[]).includes(r.rhythm) ? (r.rhythm as RhythmType) : "بدون موسيقى",
-      categoryId,
-      categoryLabel: categoryNames.get(categoryId) ?? "",
-      coverUrl: r.cover_url || r.cover_image,
-      isPublished: r.is_published !== false,
-      isTrend: r.is_trend,
-      isExclusive: r.is_exclusive,
-      executionDays: r.execution_days,
-      suitableFor: Array.isArray(r.suitable_for) ? (r.suitable_for as unknown[]).map(String) : [],
-      createdAt: (r.created_at ?? "").slice(0, 10),
-      description: r.description,
-    };
-    if (r.audio_url) track.audioUrl = r.audio_url;
-    if (r.lyrics) track.lyrics = r.lyrics;
-    if (r.audio_frequency != null) track.audioFreq = r.audio_frequency;
-    return track;
-  });
+  return { tracks, categories: catalogCategories, artists, whatsappNumber, offers, themeSettings };
 }
 
 export interface OrderSubmissionGuard {
@@ -255,44 +200,6 @@ export function adminLoadConfig(csrf: string): Promise<AdminConfig> {
   return adminPost("/api/admin/config", csrf, {}) as Promise<AdminConfig>;
 }
 
-export async function adminLoadTracks(csrf: string, categories: Category[]): Promise<Track[]> {
-  const data = (await adminPost("/api/admin/catalog", csrf, {})) as {
-    tracks?: unknown[];
-  };
-  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
-  return (data.tracks ?? []).map((value) => {
-    const r = value as Record<string, unknown>;
-    const categoryId = String(r["category_id"] ?? "");
-    const track: Track = {
-      id: String(r["id"] ?? ""),
-      title: String(r["title"] ?? ""),
-      artist: String(r["artist"] ?? r["vocalist"] ?? ""),
-      code: String(r["code"] ?? ""),
-      duration: Number(r["duration_seconds"] ?? r["duration_sec"] ?? 0),
-      durationFormatted: String(r["duration_formatted"] ?? r["duration"] ?? "00:00"),
-      playsCount: 0,
-      likesCount: 0,
-      rhythm: (RHYTHMS as string[]).includes(String(r["rhythm"]))
-        ? (String(r["rhythm"]) as RhythmType)
-        : "بدون موسيقى",
-      categoryId,
-      categoryLabel: categoryNames.get(categoryId) ?? "",
-      coverUrl: String(r["cover_url"] ?? r["cover_image"] ?? ""),
-      isPublished: r["is_published"] !== false,
-      isTrend: r["is_trend"] === true,
-      isExclusive: r["is_exclusive"] === true,
-      executionDays: String(r["execution_days"] ?? ""),
-      suitableFor: Array.isArray(r["suitable_for"]) ? r["suitable_for"].map(String) : [],
-      createdAt: String(r["created_at"] ?? "").slice(0, 10),
-      description: String(r["description"] ?? ""),
-    };
-    if (typeof r["audio_url"] === "string" && r["audio_url"]) track.audioUrl = r["audio_url"];
-    if (typeof r["lyrics"] === "string" && r["lyrics"]) track.lyrics = r["lyrics"];
-    if (typeof r["audio_frequency"] === "number") track.audioFreq = r["audio_frequency"];
-    return track;
-  });
-}
-
 interface OrderRow {
   id: string;
   track_id: string | null;
@@ -310,17 +217,6 @@ interface OrderRow {
   status: string;
 }
 
-export interface AdminOrdersQuery {
-  offset: number;
-  limit: number;
-  search?: string;
-  status?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  trackId?: string;
-  includeMetrics?: boolean;
-}
-
 export function recordVisit(): void {
   void publicPost("/api/public/events", { eventType: "visit" }).catch((error: unknown) => {
     console.error("Visit log failed", error instanceof Error ? error.message : "unknown error");
@@ -334,21 +230,11 @@ export function recordTrackPlay(trackId: string): void {
   });
 }
 
-export interface AdminOrdersResult {
-  orders: OrderRequest[];
-  total: number;
-  visits: number;
-  plays: number;
-  whatsappLeads: number;
-}
-
 export async function adminLoadOrders(
   csrf: string,
-  query: AdminOrdersQuery = { offset: 0, limit: 25, includeMetrics: true },
-): Promise<AdminOrdersResult> {
-  const data = (await adminPost("/api/admin/orders", csrf, { ...query })) as {
+): Promise<{ orders: OrderRequest[]; visits: number; plays: number; whatsappLeads: number }> {
+  const data = (await adminPost("/api/admin/orders", csrf, {})) as {
     orders?: OrderRow[];
-    totalOrders?: number;
     visits?: number;
     plays?: number;
     whatsappLeads?: number;
@@ -371,32 +257,8 @@ export async function adminLoadOrders(
   });
   return {
     orders,
-    total: data.totalOrders ?? 0,
     visits: data.visits ?? 0,
     plays: data.plays ?? 0,
     whatsappLeads: data.whatsappLeads ?? 0,
   };
-}
-
-export async function adminLoadAllOrders(
-  csrf: string,
-  filters: Omit<AdminOrdersQuery, "offset" | "limit">,
-): Promise<OrderRequest[]> {
-  const pageSize = 100;
-  const allOrders: OrderRequest[] = [];
-  let total = Number.POSITIVE_INFINITY;
-
-  while (allOrders.length < total) {
-    const result = await adminLoadOrders(csrf, {
-      ...filters,
-      offset: allOrders.length,
-      limit: pageSize,
-      includeMetrics: false,
-    });
-    allOrders.push(...result.orders);
-    total = result.total;
-    if (result.orders.length === 0) break;
-  }
-
-  return allOrders;
 }
