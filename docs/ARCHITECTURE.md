@@ -33,6 +33,7 @@ Backend API (Route Handlers / Server Actions)
 - Users interact with the frontend as guest listeners without requiring accounts.
 - The frontend never talks to PostgreSQL or Cloudflare R2 credentials directly; all writes and administrative mutations flow through the Next.js API layer.
 - Public catalog reads are restricted by RLS to published tracks; the CSRF-protected admin catalog endpoint uses the service role to include drafts and unpublished tracks.
+- Admin media uploads obtain short-lived signed Storage URLs from a CSRF-protected server endpoint; the browser uploads bytes directly, and public media reads use the dedicated public bucket.
 - Third-party AI and cloud storage API keys live strictly in server environment variables (`GEMINI_API_KEY`, `R2_SECRET_KEY`) and are never bundled to the client.
 
 ## 02 Tech stack

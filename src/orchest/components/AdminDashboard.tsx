@@ -51,6 +51,7 @@ import {
 } from '../utils/trackLogic';
 import { ImageUploader } from './ImageUploader';
 import { OffersAdminPanel } from "./OffersAdminPanel";
+import { uploadMediaFile } from '../services/mediaUpload';
 
 interface AdminDashboardProps {
   tracks: Track[];
@@ -202,6 +203,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newRhythm, setNewRhythm] = useState<RhythmType>('بدون موسيقى');
   const [newDuration, setNewDuration] = useState('04:30');
   const [newCoverUrl, setNewCoverUrl] = useState('');
+  const [newAudioUrl, setNewAudioUrl] = useState('');
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
+  const [isAudioUploading, setIsAudioUploading] = useState(false);
+  const [audioRetryFile, setAudioRetryFile] = useState<File | null>(null);
   const [newDescription, setNewDescription] = useState('');
   const [isNewTrend, setIsNewTrend] = useState(false);
   const [isPublished, setIsPublished] = useState(true);
@@ -210,6 +216,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [generatedSeo, setGeneratedSeo] = useState<GeneratedSeo | null>(null);
 
   const isDark = theme === 'dark';
+
+  const handleAudioUpload = async (inputFile: File) => {
+    const extension = inputFile.name.split('.').pop()?.toLowerCase() ?? '';
+    const typeByExtension: Record<string, string> = {
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      mp4: 'audio/mp4',
+      aac: 'audio/aac',
+      wav: 'audio/wav',
+      ogg: 'audio/ogg',
+      webm: 'audio/webm',
+    };
+    const file = inputFile.type ? inputFile : new File([inputFile], inputFile.name, {
+      type: typeByExtension[extension] ?? '',
+    });
+    const allowedTypes = [
+      'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/webm',
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      setAudioUploadError('صيغة الملف الصوتي غير مدعومة. اختر MP3 أو M4A أو WAV أو OGG.');
+      setAudioRetryFile(null);
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setAudioUploadError('حجم الملف الصوتي يتجاوز الحد الأقصى وهو 30 ميجابايت.');
+      setAudioRetryFile(null);
+      return;
+    }
+
+    setAudioUploadError(null);
+    setAudioRetryFile(file);
+    setAudioUploadProgress(0);
+    setIsAudioUploading(true);
+    try {
+      const url = await uploadMediaFile(file, csrfToken, 'audio', setAudioUploadProgress);
+      setNewAudioUrl(url);
+      setAudioRetryFile(null);
+    } catch (error) {
+      setAudioUploadError(error instanceof Error ? error.message : 'تعذر رفع الملف الصوتي.');
+    } finally {
+      setIsAudioUploading(false);
+    }
+  };
 
   // Artists management state
   const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
@@ -306,6 +355,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewDescription('');
     setGeneratedSeo(null);
     setNewCoverUrl('');
+    setNewAudioUrl('');
+    setAudioUploadProgress(0);
+    setAudioUploadError(null);
+    setAudioRetryFile(null);
     setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
     setNewDuration('04:30');
     setNewRhythm('بدون موسيقى');
@@ -324,6 +377,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewRhythm(track.rhythm);
     setNewDuration(track.durationFormatted);
     setNewCoverUrl(track.coverUrl);
+    setNewAudioUrl(track.audioUrl ?? '');
+    setAudioUploadProgress(0);
+    setAudioUploadError(null);
+    setAudioRetryFile(null);
     setNewDescription(track.description);
     setIsNewTrend(Boolean(track.isTrend));
     setIsPublished(track.isPublished !== false);
@@ -358,6 +415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         categoryId: newCategory,
         categoryLabel,
         coverUrl: newCoverUrl.trim() || existing.coverUrl,
+        audioUrl: newAudioUrl.trim(),
         isTrend: isNewTrend,
         isPublished,
         description: newDescription.trim() || existing.description,
@@ -381,6 +439,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       categoryId: newCategory,
       categoryLabel,
       coverUrl: newCoverUrl.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+      ...(newAudioUrl.trim() ? { audioUrl: newAudioUrl.trim() } : {}),
       isTrend: isNewTrend,
       isPublished,
       isExclusive: true,
@@ -1353,9 +1412,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={newCoverUrl}
                   onSelectImage={setNewCoverUrl}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="صورة غلاف العمل (رفع ملف محلي أو اختيار من المعرض)"
                   recommendedAspect="موصى به: 800×800 بكسل"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold">الملف الصوتي (اختياري)</label>
+                <input
+                  type="url"
+                  value={newAudioUrl}
+                  onChange={(event) => setNewAudioUrl(event.target.value)}
+                  placeholder="يمكن لصق رابط صوتي أو رفع ملف من الجهاز"
+                  className={`w-full rounded-xl border px-3 py-2 text-xs outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+                <input
+                  type="file"
+                  accept=".mp3,.m4a,.mp4,.aac,.wav,.ogg,.webm,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,audio/webm"
+                  disabled={isAudioUploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleAudioUpload(file);
+                    event.target.value = '';
+                  }}
+                  className="block w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-[#D4AF37]/15 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#D4AF37]"
+                />
+                <p className="text-[11px] text-gray-400">تُرفع الملفات إلى مساحة التخزين مباشرةً، بحد أقصى 30 ميجابايت.</p>
+                {isAudioUploading && (
+                  <div className="space-y-1" role="status" aria-live="polite">
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>رفع الملف الصوتي</span><span>{audioUploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                      <div className="h-full rounded-full bg-[#D4AF37] transition-all" style={{ width: `${audioUploadProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+                {audioUploadError && (
+                  <div className="flex items-center justify-between gap-2" role="alert">
+                    <p className="text-xs text-rose-400">{audioUploadError}</p>
+                    {audioRetryFile && (
+                      <button
+                        type="button"
+                        disabled={isAudioUploading}
+                        onClick={() => void handleAudioUpload(audioRetryFile)}
+                        className="shrink-0 rounded-lg border border-rose-400/30 px-2.5 py-1 text-[11px] font-bold text-rose-400 disabled:opacity-50"
+                      >
+                        إعادة المحاولة
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1601,6 +1711,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={artistAvatar}
                   onSelectImage={setArtistAvatar}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="الصورة الشخصية للفنان"
                   recommendedAspect="موصى به: 400×400 بكسل"
                 />
@@ -1687,6 +1798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={newCatImage}
                   onSelectImage={setNewCatImage}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="صورة غلاف التصنيف (رفع ملف محلي أو اختيار من المعرض)"
                   recommendedAspect="موصى به: 800×600 بكسل"
                 />

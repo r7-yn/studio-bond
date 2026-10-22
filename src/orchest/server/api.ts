@@ -1025,6 +1025,48 @@ app.post("/api/admin/catalog", async (req, res) => {
   return res.json({ tracks: data ?? [] });
 });
 
+app.post("/api/admin/media-upload-url", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+
+  const kind = str(req.body?.["kind"], 20);
+  const contentType = str(req.body?.["contentType"], 100).toLowerCase();
+  const size = num(req.body?.["size"]);
+  const extensionByType: Record<string, string> = {
+    "image/webp": "webp",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
+  };
+  const maxSize = kind === "image" ? 2 * 1024 * 1024 : 30 * 1024 * 1024;
+  if (
+    !["image", "audio"].includes(kind) ||
+    !extensionByType[contentType] ||
+    (kind === "image" && !contentType.startsWith("image/")) ||
+    (kind === "audio" && !contentType.startsWith("audio/")) ||
+    !Number.isSafeInteger(size) ||
+    size < 1 ||
+    size > maxSize
+  ) {
+    return res.status(400).json({ error: "نوع الملف أو حجمه غير مدعوم." });
+  }
+
+  const folder = kind === "image" ? "images" : "audio";
+  const path = `${folder}/${Date.now()}-${randomBytes(12).toString("hex")}.${extensionByType[contentType]}`;
+  const db = await adminDb();
+  const storage = db.storage.from("orchest-media");
+  const { data, error } = await storage.createSignedUploadUrl(path, { upsert: false });
+  if (error) return res.status(503).json({ error: "تعذر تجهيز مساحة رفع الملف." });
+  const { data: publicData } = storage.getPublicUrl(path);
+  return res.json({ signedUrl: data.signedUrl, publicUrl: publicData.publicUrl });
+});
+
 app.post("/api/admin/mutate", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
@@ -1145,6 +1187,7 @@ app.post("/api/admin/mutate", async (req, res) => {
           duration_sec: dur,
           duration_seconds: dur,
           duration_formatted: fmt,
+          audio_url: str(t["audioUrl"], 2000),
           cover_image: cover,
           cover_url: cover,
           rhythm,
