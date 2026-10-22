@@ -110,6 +110,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     "tracks" | "categories" | "offers" | "orders" | "analytics" | "settings"
   >("tracks");
   const [searchTerm, setSearchTerm] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'الكل' | OrderRequest['status']>('الكل');
 
   // Settings & WhatsApp State
   const [inputWhatsApp, setInputWhatsApp] = useState(whatsappNumber);
@@ -725,12 +727,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
           }`}
         >
-          <div className="p-4 border-b border-white/10 flex items-center justify-between">
-            <h3 className="font-bold text-base flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-[#25D366]" />
-              <span>سجل طلبات واتساب الواردة من الزوار</span>
-            </h3>
-            <span className="text-xs text-gray-400">{orders.length} طلب مسجل</span>
+          <div className="p-4 border-b border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                <span>سجل طلبات واتساب الواردة من الزوار</span>
+              </h3>
+              <span className="text-xs text-gray-400">{filteredOrders.length} من {orders.length} طلب</span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="بحث بالاسم أو العمل أو الكود..."
+                  className={`w-full pr-9 pl-4 py-2 text-sm rounded-xl border outline-none ${
+                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  }`}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(['الكل', 'جديد', 'قيد التنفيذ', 'مكتمل'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setOrderStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      orderStatusFilter === st
+                        ? 'bg-[#D4AF37] text-black shadow-sm'
+                        : isDark
+                          ? 'bg-white/5 text-gray-400 hover:text-white'
+                          : 'bg-black/5 text-gray-500 hover:text-black'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -750,7 +786,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {orders.map((ord) => (
+                {filteredOrders.map((ord) => (
                   <tr
                     key={ord.id}
                     className={`transition-colors ${
