@@ -205,6 +205,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const isDark = theme === 'dark';
 
+  // Artists management state
+  const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
+  const [editingArtistId, setEditingArtistId] = useState<string | null>(null);
+  const [artistName, setArtistName] = useState('');
+  const [artistRole, setArtistRole] = useState('');
+  const [artistBio, setArtistBio] = useState('');
+  const [artistAvatar, setArtistAvatar] = useState('');
+  const [artistGenres, setArtistGenres] = useState('');
+  const [artistVerified, setArtistVerified] = useState(false);
+
+  const resetArtistForm = () => {
+    setEditingArtistId(null);
+    setArtistName('');
+    setArtistRole('');
+    setArtistBio('');
+    setArtistAvatar('');
+    setArtistGenres('');
+    setArtistVerified(false);
+  };
+
+  const openArtistEditModal = (artist: Artist) => {
+    setEditingArtistId(artist.id);
+    setArtistName(artist.name);
+    setArtistRole(artist.role);
+    setArtistBio(artist.bio);
+    setArtistAvatar(artist.avatar);
+    setArtistGenres(artist.genres.join('، '));
+    setArtistVerified(Boolean(artist.isVerified));
+    setIsArtistModalOpen(true);
+  };
+
+  const handleSaveArtist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!artistName.trim()) {
+      toast.error('يرجى إدخال اسم الفنان');
+      return;
+    }
+    const genres = artistGenres
+      .split(/[،,]/)
+      .map((g) => g.trim())
+      .filter(Boolean);
+    const existing = editingArtistId ? artists.find((a) => a.id === editingArtistId) : undefined;
+    const artist: Artist = {
+      id: existing?.id ?? `artist-${Date.now()}`,
+      name: artistName.trim(),
+      role: artistRole.trim() || 'منشد',
+      bio: artistBio.trim(),
+      avatar: artistAvatar.trim() || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      genres,
+      isVerified: artistVerified,
+      totalStreams: existing?.totalStreams ?? 0,
+      tracksCount: existing?.tracksCount ?? 0,
+      ...(existing?.coverImage ? { coverImage: existing.coverImage } : {}),
+    };
+    if (existing) onUpdateArtist(artist);
+    else onAddArtist(artist);
+    setIsArtistModalOpen(false);
+    resetArtistForm();
+  };
+
   // Categories management state
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
@@ -472,6 +532,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           إدارة الأعمال الصوتية ({tracks.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('artists')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'artists'
+              ? 'bg-[#D4AF37] text-black shadow-md'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>الفنانون ({artists.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('categories')}
