@@ -434,6 +434,11 @@ export default function App() {
     void persist({ action: "addTrack", track: newTrack }, "تم حفظ العمل");
   };
 
+  const handleUpdateTrack = (track: Track) => {
+    setTracks((prev) => prev.map((t) => (t.id === track.id ? track : t)));
+    void persist({ action: "updateTrack", track }, "تم حفظ التعديلات");
+  };
+
   const handleDeleteTrack = (id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     void persist({ action: "deleteTrack", id });

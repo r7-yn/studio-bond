@@ -1020,7 +1020,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Modal: Add New Track (إضافة عمل جديد) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setIsAddModalOpen(false)} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
 
           <div
             className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
@@ -1028,9 +1028,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
-              <h3 className="font-bold text-lg">إضافة عمل صوتي جديد إلى أوركست</h3>
+              <h3 className="font-bold text-lg">
+                {editingTrackId ? 'تعديل بيانات العمل الصوتي' : 'إضافة عمل صوتي جديد إلى أوركست'}
+              </h3>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }}
                 aria-label="إغلاق النافذة"
                 className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
               >
@@ -1227,7 +1229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="submit"
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-4"
               >
-                حفظ وإضافة العمل
+                {editingTrackId ? 'حفظ التعديلات' : 'حفظ وإضافة العمل'}
               </button>
             </form>
           </div>
