@@ -14,6 +14,7 @@ import { adminHeaders } from "../utils/adminAuth";
 
 export interface Catalog {
   tracks: Track[];
+  tracksTotal: number;
   categories: Category[];
   artists: Artist[];
   whatsappNumber: string | null;
@@ -22,10 +23,16 @@ export interface Catalog {
 }
 
 const RHYTHMS: RhythmType[] = ["بدون موسيقى", "دفوف", "أوركسترا"];
+const PUBLIC_TRACKS_PAGE_SIZE = 40;
 
 export async function loadCatalog(): Promise<Catalog> {
   const [t, c, a, s, o, th] = await Promise.all([
-    supabase.from("tracks").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("tracks")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(0, PUBLIC_TRACKS_PAGE_SIZE - 1),
     supabase.from("categories").select("*").order("sort_order"),
     supabase.from("artists").select("*").order("sort_order"),
     supabase.from("site_settings").select("key,value").eq("key", "whatsapp_number"),
@@ -35,13 +42,15 @@ export async function loadCatalog(): Promise<Catalog> {
   const err = t.error || c.error || a.error || s.error || o.error || th.error;
   if (err) throw new Error(err.message);
 
-  const categories: Category[] = (c.data ?? []).map((r) => ({
-    id: r.id,
-    name: r.name,
-    count: r.track_count ?? 0,
-    image: r.image_url ?? "",
-    description: r.description,
-  }));
+  const categories: Category[] = (c.data ?? [])
+    .filter((r) => (r.track_count ?? 0) > 0)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      count: r.track_count ?? 0,
+      image: r.image_url ?? "",
+      description: r.description,
+    }));
   const catName = new Map(categories.map((x) => [x.id, x.name]));
 
   const tracks: Track[] = (t.data ?? []).map((r) => {
@@ -59,6 +68,7 @@ export async function loadCatalog(): Promise<Catalog> {
       categoryId: r.category_id ?? "",
       categoryLabel: catName.get(r.category_id ?? "") ?? "",
       coverUrl: r.cover_url || r.cover_image,
+      isPublished: r.is_published !== false,
       isTrend: r.is_trend,
       isExclusive: r.is_exclusive,
       executionDays: r.execution_days,
@@ -72,21 +82,23 @@ export async function loadCatalog(): Promise<Catalog> {
     return track;
   });
 
-  const artists: Artist[] = (a.data ?? []).map((r) => {
-    const artist: Artist = {
-      id: r.id,
-      name: r.name,
-      avatar: r.avatar,
-      role: r.role,
-      bio: r.bio,
-      genres: Array.isArray(r.genres) ? (r.genres as unknown[]).map(String) : [],
-      isVerified: r.is_verified,
-      totalStreams: 0,
-      tracksCount: tracks.filter((track) => track.artist === r.name).length,
-    };
-    if (r.cover_image) artist.coverImage = r.cover_image;
-    return artist;
-  });
+  const artists: Artist[] = (a.data ?? [])
+    .filter((r) => r.tracks_count > 0)
+    .map((r) => {
+      const artist: Artist = {
+        id: r.id,
+        name: r.name,
+        avatar: r.avatar,
+        role: r.role,
+        bio: r.bio,
+        genres: Array.isArray(r.genres) ? (r.genres as unknown[]).map(String) : [],
+        isVerified: r.is_verified,
+        totalStreams: 0,
+        tracksCount: r.tracks_count ?? 0,
+      };
+      if (r.cover_image) artist.coverImage = r.cover_image;
+      return artist;
+    });
 
   const whatsappNumber = (s.data ?? []).find((x) => x.key === "whatsapp_number")?.value ?? null;
   const themeRow = th.data?.[0];
@@ -127,12 +139,59 @@ export async function loadCatalog(): Promise<Catalog> {
     ...(row.end_date != null ? { endDate: row.end_date } : {}),
     createdAt: row.created_at,
   }));
-  const catalogCategories = categories.map((category) => ({
-    ...category,
-    count: tracks.filter((track) => track.categoryId === category.id).length,
-  }));
+  return {
+    tracks,
+    tracksTotal: t.count ?? tracks.length,
+    categories,
+    artists,
+    whatsappNumber,
+    offers,
+    themeSettings,
+  };
+}
 
-  return { tracks, categories: catalogCategories, artists, whatsappNumber, offers, themeSettings };
+export async function loadCatalogTrackPage(
+  offset: number,
+  categories: Category[],
+): Promise<Track[]> {
+  const pageSize = PUBLIC_TRACKS_PAGE_SIZE;
+  const { data, error } = await supabase
+    .from("tracks")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
+    .range(offset, offset + pageSize - 1);
+  if (error) throw new Error(error.message);
+
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  return (data ?? []).map((r) => {
+    const categoryId = r.category_id ?? "";
+    const track: Track = {
+      id: r.id,
+      title: r.title,
+      artist: r.artist || r.vocalist,
+      code: r.code,
+      duration: r.duration_seconds || r.duration_sec,
+      durationFormatted: r.duration_formatted || r.duration,
+      playsCount: 0,
+      likesCount: 0,
+      rhythm: (RHYTHMS as string[]).includes(r.rhythm) ? (r.rhythm as RhythmType) : "بدون موسيقى",
+      categoryId,
+      categoryLabel: categoryNames.get(categoryId) ?? "",
+      coverUrl: r.cover_url || r.cover_image,
+      isPublished: r.is_published !== false,
+      isTrend: r.is_trend,
+      isExclusive: r.is_exclusive,
+      executionDays: r.execution_days,
+      suitableFor: Array.isArray(r.suitable_for) ? (r.suitable_for as unknown[]).map(String) : [],
+      createdAt: (r.created_at ?? "").slice(0, 10),
+      description: r.description,
+    };
+    if (r.audio_url) track.audioUrl = r.audio_url;
+    if (r.lyrics) track.lyrics = r.lyrics;
+    if (r.audio_frequency != null) track.audioFreq = r.audio_frequency;
+    return track;
+  });
 }
 
 export interface OrderSubmissionGuard {
@@ -200,6 +259,73 @@ export function adminLoadConfig(csrf: string): Promise<AdminConfig> {
   return adminPost("/api/admin/config", csrf, {}) as Promise<AdminConfig>;
 }
 
+export async function adminLoadEntities(
+  csrf: string,
+): Promise<{ categories: Category[]; artists: Artist[] }> {
+  const data = (await adminPost("/api/admin/entities", csrf, {})) as {
+    categories?: Array<Record<string, unknown>>;
+    artists?: Array<Record<string, unknown>>;
+  };
+  const categories: Category[] = (data.categories ?? []).map((row) => ({
+    id: String(row["id"] ?? ""),
+    name: String(row["name"] ?? ""),
+    count: Number(row["track_count"] ?? 0),
+    image: String(row["image_url"] ?? ""),
+    description: String(row["description"] ?? ""),
+  }));
+  const artists: Artist[] = (data.artists ?? []).map((row) => ({
+    id: String(row["id"] ?? ""),
+    name: String(row["name"] ?? ""),
+    avatar: String(row["avatar"] ?? ""),
+    role: String(row["role"] ?? ""),
+    bio: String(row["bio"] ?? ""),
+    genres: Array.isArray(row["genres"]) ? row["genres"].map(String) : [],
+    isVerified: row["is_verified"] === true,
+    totalStreams: 0,
+    tracksCount: Number(row["tracks_count"] ?? 0),
+    ...(row["cover_image"] ? { coverImage: String(row["cover_image"]) } : {}),
+  }));
+  return { categories, artists };
+}
+
+export async function adminLoadTracks(csrf: string, categories: Category[]): Promise<Track[]> {
+  const data = (await adminPost("/api/admin/catalog", csrf, {})) as {
+    tracks?: unknown[];
+  };
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  return (data.tracks ?? []).map((value) => {
+    const r = value as Record<string, unknown>;
+    const categoryId = String(r["category_id"] ?? "");
+    const track: Track = {
+      id: String(r["id"] ?? ""),
+      title: String(r["title"] ?? ""),
+      artist: String(r["artist"] ?? r["vocalist"] ?? ""),
+      code: String(r["code"] ?? ""),
+      duration: Number(r["duration_seconds"] ?? r["duration_sec"] ?? 0),
+      durationFormatted: String(r["duration_formatted"] ?? r["duration"] ?? "00:00"),
+      playsCount: 0,
+      likesCount: 0,
+      rhythm: (RHYTHMS as string[]).includes(String(r["rhythm"]))
+        ? (String(r["rhythm"]) as RhythmType)
+        : "بدون موسيقى",
+      categoryId,
+      categoryLabel: categoryNames.get(categoryId) ?? "",
+      coverUrl: String(r["cover_url"] ?? r["cover_image"] ?? ""),
+      isPublished: r["is_published"] !== false,
+      isTrend: r["is_trend"] === true,
+      isExclusive: r["is_exclusive"] === true,
+      executionDays: String(r["execution_days"] ?? ""),
+      suitableFor: Array.isArray(r["suitable_for"]) ? r["suitable_for"].map(String) : [],
+      createdAt: String(r["created_at"] ?? "").slice(0, 10),
+      description: String(r["description"] ?? ""),
+    };
+    if (typeof r["audio_url"] === "string" && r["audio_url"]) track.audioUrl = r["audio_url"];
+    if (typeof r["lyrics"] === "string" && r["lyrics"]) track.lyrics = r["lyrics"];
+    if (typeof r["audio_frequency"] === "number") track.audioFreq = r["audio_frequency"];
+    return track;
+  });
+}
+
 interface OrderRow {
   id: string;
   track_id: string | null;
@@ -217,6 +343,17 @@ interface OrderRow {
   status: string;
 }
 
+export interface AdminOrdersQuery {
+  offset: number;
+  limit: number;
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  trackId?: string;
+  includeMetrics?: boolean;
+}
+
 export function recordVisit(): void {
   void publicPost("/api/public/events", { eventType: "visit" }).catch((error: unknown) => {
     console.error("Visit log failed", error instanceof Error ? error.message : "unknown error");
@@ -230,11 +367,21 @@ export function recordTrackPlay(trackId: string): void {
   });
 }
 
+export interface AdminOrdersResult {
+  orders: OrderRequest[];
+  total: number;
+  visits: number;
+  plays: number;
+  whatsappLeads: number;
+}
+
 export async function adminLoadOrders(
   csrf: string,
-): Promise<{ orders: OrderRequest[]; visits: number; plays: number; whatsappLeads: number }> {
-  const data = (await adminPost("/api/admin/orders", csrf, {})) as {
+  query: AdminOrdersQuery = { offset: 0, limit: 25, includeMetrics: true },
+): Promise<AdminOrdersResult> {
+  const data = (await adminPost("/api/admin/orders", csrf, { ...query })) as {
     orders?: OrderRow[];
+    totalOrders?: number;
     visits?: number;
     plays?: number;
     whatsappLeads?: number;
@@ -257,8 +404,32 @@ export async function adminLoadOrders(
   });
   return {
     orders,
+    total: data.totalOrders ?? 0,
     visits: data.visits ?? 0,
     plays: data.plays ?? 0,
     whatsappLeads: data.whatsappLeads ?? 0,
   };
+}
+
+export async function adminLoadAllOrders(
+  csrf: string,
+  filters: Omit<AdminOrdersQuery, "offset" | "limit">,
+): Promise<OrderRequest[]> {
+  const pageSize = 100;
+  const allOrders: OrderRequest[] = [];
+  let total = Number.POSITIVE_INFINITY;
+
+  while (allOrders.length < total) {
+    const result = await adminLoadOrders(csrf, {
+      ...filters,
+      offset: allOrders.length,
+      limit: pageSize,
+      includeMetrics: false,
+    });
+    allOrders.push(...result.orders);
+    total = result.total;
+    if (result.orders.length === 0) break;
+  }
+
+  return allOrders;
 }

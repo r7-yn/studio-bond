@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { X, MessageCircle, Sparkles, CheckCircle2, ArrowRight, ArrowLeft, Music, Check } from 'lucide-react';
-import { Track, ThemeMode, OrderRequest } from '../types/index';
-import { generateWhatsAppMessage, generateWhatsAppUrl } from '../utils/trackLogic';
-import { STUDIO_WHATSAPP_NUMBER } from '../data/mockData';
-import { validateOrderStep, ORDER_STEPS, type OrderStep } from '../utils/orderSteps';
+import React, { useEffect, useState } from "react";
+import {
+  X,
+  MessageCircle,
+  Sparkles,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Music,
+  Check,
+} from "lucide-react";
+import { Track, ThemeMode, OrderRequest } from "../types/index";
+import { generateWhatsAppMessage, generateWhatsAppUrl } from "../utils/trackLogic";
+import { validateOrderStep, ORDER_STEPS, type OrderStep } from "../utils/orderSteps";
 
 interface OrderModalProps {
   track: Track;
@@ -18,40 +26,40 @@ interface OrderModalProps {
 }
 
 const modificationOptions = [
-  { value: 'تغيير الأسماء فقط', hint: 'نفس العمل مع أسمائكم' },
-  { value: 'إضافة مقدمة صوتية وشعر خاص بالأسماء', hint: 'مقدمة شعرية تليق بالمناسبة' },
-  { value: 'تعديل الإيقاع والمؤثرات (دفوف / بدون موسيقى)', hint: 'اختيار الإيقاع المناسب' },
-  { value: 'تنفيذ زفة حصرية كاملة من الصفر', hint: 'عمل خاص بكم بالكامل' },
+  { value: "تغيير الأسماء فقط", hint: "نفس العمل مع أسمائكم" },
+  { value: "إضافة مقدمة صوتية وشعر خاص بالأسماء", hint: "مقدمة شعرية تليق بالمناسبة" },
+  { value: "تعديل الإيقاع والمؤثرات (دفوف / بدون موسيقى)", hint: "اختيار الإيقاع المناسب" },
+  { value: "تنفيذ زفة حصرية كاملة من الصفر", hint: "عمل خاص بكم بالكامل" },
 ];
 
 const inputClass =
-  'w-full px-4 py-3 rounded-[10px] border border-o-border bg-o-bg text-o-text placeholder:text-o-muted text-sm outline-none transition-colors focus:border-o-primary';
+  "w-full px-4 py-3 rounded-[10px] border border-o-border bg-o-bg text-o-text placeholder:text-o-muted text-sm outline-none transition-colors focus:border-o-primary";
 
 export const OrderModal: React.FC<OrderModalProps> = ({
   track,
   isOpen,
   onClose,
   onSubmitOrder,
-  whatsappNumber = STUDIO_WHATSAPP_NUMBER,
+  whatsappNumber = "",
 }) => {
   const [step, setStep] = useState<OrderStep>(0);
-  const [clientNames, setClientNames] = useState('');
-  const [modificationType, setModificationType] = useState('تغيير الأسماء فقط');
-  const [occasionDate, setOccasionDate] = useState('');
-  const [notes, setNotes] = useState('');
-  const [phone, setPhone] = useState('');
+  const [clientNames, setClientNames] = useState("");
+  const [modificationType, setModificationType] = useState("تغيير الأسماء فقط");
+  const [occasionDate, setOccasionDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [phone, setPhone] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
-  const [honeypot, setHoneypot] = useState('');
+  const [honeypot, setHoneypot] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
     setFormStartedAt(Date.now());
     setRequestId(crypto.randomUUID());
-    setHoneypot('');
+    setHoneypot("");
     setIsSubmitting(false);
     setError(null);
   }, [isOpen]);
@@ -64,11 +72,11 @@ export const OrderModal: React.FC<OrderModalProps> = ({
     const problem = validateOrderStep(step, form);
     if (problem) return setError(problem);
     setError(null);
-    setStep((s) => (Math.min(2, s + 1) as OrderStep));
+    setStep((s) => Math.min(2, s + 1) as OrderStep);
   };
   const goBack = () => {
     setError(null);
-    setStep((s) => (Math.max(0, s - 1) as OrderStep));
+    setStep((s) => Math.max(0, s - 1) as OrderStep);
   };
 
   const handleSendOrder = async () => {
@@ -88,10 +96,11 @@ export const OrderModal: React.FC<OrderModalProps> = ({
       customPhone: phone,
     });
     const whatsappUrl = generateWhatsAppUrl(whatsappNumber, message);
-    if (!whatsappUrl) return setError('رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.');
+    if (!whatsappUrl)
+      return setError("رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.");
 
     // Open during the click gesture; delayed window.open calls are often blocked.
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
     setIsSubmitting(true);
     setError(null);
     try {
@@ -106,8 +115,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
           occasionDate,
           notes: notes.trim(),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          status: 'جديد',
+          timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+          status: "جديد",
         },
         { formStartedAt, website: honeypot },
       );
@@ -121,8 +130,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
         setIsSubmitting(false);
       }, 1200);
     } catch (submitError) {
-      console.error('Order submission failed', submitError);
-      setError('تعذر حفظ الطلب حالياً. بقيت محادثة واتساب مفتوحة، ويمكنك المحاولة مجدداً.');
+      console.error("Order submission failed", submitError);
+      setError("تعذر حفظ الطلب حالياً. بقيت محادثة واتساب مفتوحة، ويمكنك المحاولة مجدداً.");
       setIsSubmitting(false);
     }
   };
@@ -130,7 +139,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({
   const progress = ((step + 1) / ORDER_STEPS.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" dir="rtl">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      dir="rtl"
+    >
       <div onClick={onClose} className="fixed inset-0 bg-o-overlay backdrop-blur-sm" />
 
       <div
@@ -139,7 +151,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({
         aria-label="طلب الزفة باسمك"
         className="relative z-10 w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-o-border bg-o-surface text-o-text shadow-o-elevated animate-in fade-in slide-in-from-bottom-4 duration-300"
       >
-        <div aria-hidden="true" className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden"
+        >
           <label htmlFor="order-website-field">لا تعبئ هذا الحقل</label>
           <input
             id="order-website-field"
@@ -181,21 +196,26 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                   <span
                     className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
                       done
-                        ? 'bg-o-primary border-o-primary text-o-on-primary'
+                        ? "bg-o-primary border-o-primary text-o-on-primary"
                         : active
-                          ? 'border-o-primary text-o-primary'
-                          : 'border-o-border text-o-muted'
+                          ? "border-o-primary text-o-primary"
+                          : "border-o-border text-o-muted"
                     }`}
                   >
                     {done ? <Check className="w-4 h-4" /> : i + 1}
                   </span>
-                  <span className={active || done ? 'font-medium text-o-text' : 'text-o-muted'}>{label}</span>
+                  <span className={active || done ? "font-medium text-o-text" : "text-o-muted"}>
+                    {label}
+                  </span>
                 </li>
               );
             })}
           </ol>
           <div className="h-1.5 w-full rounded-full bg-o-border overflow-hidden" aria-hidden="true">
-            <div className="h-full rounded-full bg-o-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div
+              className="h-full rounded-full bg-o-primary transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
 
@@ -205,7 +225,9 @@ export const OrderModal: React.FC<OrderModalProps> = ({
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <h4 className="text-xl font-semibold mb-2">تم تجهيز طلبك</h4>
-            <p className="text-sm text-o-muted">ننقلك الآن إلى محادثة واتساب الاستوديو لتأكيد التفاصيل</p>
+            <p className="text-sm text-o-muted">
+              ننقلك الآن إلى محادثة واتساب الاستوديو لتأكيد التفاصيل
+            </p>
           </div>
         ) : (
           <div className="grid gap-6 px-6 pb-6 sm:grid-cols-[1fr_15rem]">
@@ -224,13 +246,13 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                         aria-pressed={selected}
                         className={`w-full text-right flex items-center gap-3 p-4 rounded-[10px] border transition-colors ${
                           selected
-                            ? 'border-o-primary bg-o-primary/10'
-                            : 'border-o-border bg-o-bg hover:bg-o-surface-hover'
+                            ? "border-o-primary bg-o-primary/10"
+                            : "border-o-border bg-o-bg hover:bg-o-surface-hover"
                         }`}
                       >
                         <span
                           className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                            selected ? 'border-o-primary' : 'border-o-border'
+                            selected ? "border-o-primary" : "border-o-border"
                           }`}
                         >
                           {selected && <span className="h-2.5 w-2.5 rounded-full bg-o-primary" />}
@@ -262,11 +284,20 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                   </label>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
-                      <span className="block text-sm font-medium mb-1.5">تاريخ المناسبة (اختياري)</span>
-                      <input type="date" value={occasionDate} onChange={(e) => setOccasionDate(e.target.value)} className={inputClass} />
+                      <span className="block text-sm font-medium mb-1.5">
+                        تاريخ المناسبة (اختياري)
+                      </span>
+                      <input
+                        type="date"
+                        value={occasionDate}
+                        onChange={(e) => setOccasionDate(e.target.value)}
+                        className={inputClass}
+                      />
                     </label>
                     <label className="block">
-                      <span className="block text-sm font-medium mb-1.5">رقم التواصل (اختياري)</span>
+                      <span className="block text-sm font-medium mb-1.5">
+                        رقم التواصل (اختياري)
+                      </span>
                       <input
                         type="tel"
                         dir="ltr"
@@ -287,7 +318,9 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                       placeholder="أي تفاصيل تحب نعرفها"
                       className={`${inputClass} resize-none`}
                     />
-                    <span className="block text-left text-xs text-o-muted mt-1">{notes.length}/500</span>
+                    <span className="block text-left text-xs text-o-muted mt-1">
+                      {notes.length}/500
+                    </span>
                   </label>
                 </div>
               )}
@@ -297,11 +330,11 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                   <h4 className="text-sm font-semibold">راجع طلبك قبل الإرسال</h4>
                   <dl className="divide-y divide-o-border rounded-[10px] border border-o-border bg-o-bg text-sm">
                     {[
-                      ['نوع الطلب', modificationType, 0],
-                      ['الأسماء', clientNames, 1],
-                      ['تاريخ المناسبة', occasionDate || 'لم يحدد', 1],
-                      ['رقم التواصل', phone || 'لم يحدد', 1],
-                      ['ملاحظات', notes || 'لا توجد', 1],
+                      ["نوع الطلب", modificationType, 0],
+                      ["الأسماء", clientNames, 1],
+                      ["تاريخ المناسبة", occasionDate || "لم يحدد", 1],
+                      ["رقم التواصل", phone || "لم يحدد", 1],
+                      ["ملاحظات", notes || "لا توجد", 1],
                     ].map(([k, v, s]) => (
                       <div key={k as string} className="flex items-start justify-between gap-3 p-3">
                         <dt className="text-o-muted shrink-0">{k}</dt>
@@ -316,12 +349,17 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                       </div>
                     ))}
                   </dl>
-                  <p className="text-xs text-o-muted">سيُفتح واتساب برسالة جاهزة لتأكيد الطلب مع فريق الاستوديو.</p>
+                  <p className="text-xs text-o-muted">
+                    سيُفتح واتساب برسالة جاهزة لتأكيد الطلب مع فريق الاستوديو.
+                  </p>
                 </div>
               )}
 
               {error && (
-                <p role="alert" className="rounded-[10px] border border-o-danger/30 bg-o-danger/10 px-3 py-2 text-sm text-o-danger">
+                <p
+                  role="alert"
+                  className="rounded-[10px] border border-o-danger/30 bg-o-danger/10 px-3 py-2 text-sm text-o-danger"
+                >
                   {error}
                 </p>
               )}
@@ -354,7 +392,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                     disabled={isSubmitting}
                     className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-whatsapp px-5 text-sm font-semibold text-o-on-whatsapp hover:bg-o-whatsapp-hover transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <MessageCircle className="w-4 h-4" /> {isSubmitting ? 'جارٍ حفظ الطلب...' : 'تأكيد عبر واتساب'}
+                    <MessageCircle className="w-4 h-4" />{" "}
+                    {isSubmitting ? "جارٍ حفظ الطلب..." : "تأكيد عبر واتساب"}
                   </button>
                 )}
               </div>
@@ -364,7 +403,11 @@ export const OrderModal: React.FC<OrderModalProps> = ({
             <aside className="rounded-2xl border border-o-border bg-o-bg p-4 h-fit sm:sticky sm:top-4">
               <p className="text-xs font-medium text-o-muted mb-3">ملخص الطلب</p>
               <div className="flex items-center gap-3 mb-4">
-                <img src={track.coverUrl} alt={track.title} className="w-12 h-12 rounded-[10px] object-cover" />
+                <img
+                  src={track.coverUrl}
+                  alt={track.title}
+                  className="w-12 h-12 rounded-[10px] object-cover"
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate">{track.title}</p>
                   <p className="text-xs text-o-muted truncate">{track.artist}</p>
@@ -373,13 +416,23 @@ export const OrderModal: React.FC<OrderModalProps> = ({
               <ul className="space-y-2 text-xs">
                 <li className="flex items-center gap-2">
                   <Music className="w-3.5 h-3.5 text-o-primary shrink-0" />
-                  <span dir="ltr" className="font-mono text-o-primary">{track.code}</span>
+                  <span dir="ltr" className="font-mono text-o-primary">
+                    {track.code}
+                  </span>
                   <span className="text-o-muted">• {track.durationFormatted}</span>
                 </li>
-                <li className="text-o-muted">الطلب: <span className="text-o-text">{modificationType}</span></li>
-                <li className="text-o-muted">الأسماء: <span className="text-o-text">{clientNames || '—'}</span></li>
-                <li className="text-o-muted">التاريخ: <span className="text-o-text">{occasionDate || '—'}</span></li>
-                <li className="text-o-muted">مدة التنفيذ: <span className="text-o-text">{track.executionDays}</span></li>
+                <li className="text-o-muted">
+                  الطلب: <span className="text-o-text">{modificationType}</span>
+                </li>
+                <li className="text-o-muted">
+                  الأسماء: <span className="text-o-text">{clientNames || "—"}</span>
+                </li>
+                <li className="text-o-muted">
+                  التاريخ: <span className="text-o-text">{occasionDate || "—"}</span>
+                </li>
+                <li className="text-o-muted">
+                  مدة التنفيذ: <span className="text-o-text">{track.executionDays}</span>
+                </li>
               </ul>
             </aside>
           </div>

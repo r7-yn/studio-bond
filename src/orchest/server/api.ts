@@ -1,5 +1,6 @@
 // Ported from the original Express server.ts; handlers run on the Worker through a small req/res shim.
-import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
 import { Buffer } from "node:buffer";
 import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from "./shim";
 import { parseOfferDateBoundary } from "../utils/offerLogic";
@@ -40,12 +41,11 @@ const RATE_WINDOW_MS = 60_000;
 interface AdminSession {
   csrfToken: string;
   expiresAt: number;
+  userId: string;
 }
 
-const adminSessions = new Map<string, AdminSession>();
 const SESSION_COOKIE = "orchest_admin_session";
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-const PASSWORD_ITERATIONS = 210_000;
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -64,58 +64,30 @@ function parseCookies(header: string | undefined): Record<string, string> {
   );
 }
 
-function getAdminPasswordHash(): string | null {
-  const configured = process.env["ADMIN_PASSWORD_HASH"]?.trim();
-  return configured && configured.startsWith("pbkdf2$") ? configured : null;
-}
-
-function verifyAdminPassword(password: string): boolean {
-  const configured = getAdminPasswordHash();
-  if (!configured) {
-    // Fallback: plain ADMIN_PASSWORD stored as a server-only secret, compared in constant time.
-    const plain = process.env["ADMIN_PASSWORD"];
-    if (!plain || plain.length < 8) return false;
-    const a = createHmac("sha256", "cmp").update(password).digest();
-    const b = createHmac("sha256", "cmp").update(plain).digest();
-    return timingSafeEqual(a, b);
-  }
-  const parts = configured.split("$");
-  if (parts.length !== 5 || parts[1] !== "sha512") return false;
-  const iterations = Number(parts[2]);
-  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000)
-    return false;
-  try {
-    const expected = Buffer.from(parts[4] ?? "", "base64url");
-    const actual = pbkdf2Sync(password, parts[3] ?? "", iterations, expected.length, "sha512");
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
-  } catch {
-    return false;
-  }
+function sessionCookieAttributes(): string {
+  if (process.env["ORCHEST_ALLOW_INSECURE_LOCAL_COOKIES"] === "true") return "; SameSite=Lax";
+  return "; SameSite=None; Secure";
 }
 
 function setSessionCookie(res: ShimRes, token: string): void {
-  const secure = process.env["NODE_ENV"] === "production" ? "; Secure" : "";
   res.setHeader(
     "Set-Cookie",
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${SESSION_TTL_MS / 1000}${secure}`,
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly${sessionCookieAttributes()}; Max-Age=${SESSION_TTL_MS / 1000}`,
   );
 }
 
 function clearSessionCookie(res: ShimRes): void {
   res.setHeader(
     "Set-Cookie",
-    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=None; Partitioned; Secure; Max-Age=0`,
+    `${SESSION_COOKIE}=; Path=/; HttpOnly${sessionCookieAttributes()}; Max-Age=0`,
   );
 }
 
-// Stateless signed sessions: Workers keep no memory between requests, so the cookie
-// itself carries the expiry, signed with a key derived from the server-side password hash.
-// Changing the admin password automatically signs out every existing session.
 function sessionKey(): string | null {
-  const explicit = process.env["ADMIN_SESSION_SECRET"]?.trim();
-  if (explicit && explicit.length >= 32) return explicit;
-  const hash = getAdminPasswordHash();
-  return hash ? `orchest-session:${hash}` : null;
+  const dedicated = process.env["ADMIN_SESSION_SECRET"]?.trim();
+  const source = dedicated || process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  if (!source || source.length < 32) return null;
+  return createHmac("sha256", source).update("orchest-admin-cookie-signing:v1").digest("base64url");
 }
 
 function sign(value: string): string | null {
@@ -129,31 +101,32 @@ function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-function createSessionToken(): string | null {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${randomBytes(16).toString("base64url")}`;
-  const sig = sign(payload);
-  return sig ? `${payload}.${sig}` : null;
+function createSessionToken(userId: string): string | null {
+  const payload = `${Date.now() + SESSION_TTL_MS}.${userId}.${randomBytes(16).toString("base64url")}`;
+  const signature = sign(payload);
+  return signature ? `${payload}.${signature}` : null;
 }
 
 function getAdminSession(req: ShimReq): AdminSession | null {
-  const token =
-    parseCookies(req.headers.cookie)[SESSION_COOKIE] || req.header("x-admin-session") || undefined;
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!token) return null;
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const payload = `${parts[0]}.${parts[1]}`;
+  if (parts.length !== 4) return null;
+  const payload = parts.slice(0, 3).join(".");
   const expected = sign(payload);
-  if (!expected || !safeEqual(expected, parts[2] ?? "")) return null;
+  if (!expected || !safeEqual(expected, parts[3] ?? "")) return null;
   const expiresAt = Number(parts[0]);
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  const userId = parts[1] ?? "";
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || !/^[0-9a-f-]{36}$/i.test(userId))
+    return null;
   const csrfToken = sign(`csrf:${token}`);
-  return csrfToken ? { csrfToken, expiresAt } : null;
+  return csrfToken ? { csrfToken, expiresAt, userId } : null;
 }
 
 function requireAdmin(req: ShimReq, res: ShimRes): AdminSession | null {
   const session = getAdminSession(req);
   if (!session) {
-    res.status(401).json({ error: "يلزم تسجيل دخول المدير" });
+    res.status(401).json({ error: "يلزم تسجيل دخول المدير عبر Supabase Auth" });
     return null;
   }
   return session;
@@ -270,18 +243,59 @@ function recordLoginFailure(req: ShimReq): void {
   current.count += 1;
 }
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   if (rejectLoginRateLimited(req, res)) return null;
-  const password = parseBoundedText(req.body?.["password"], 256);
-  if (!password || !verifyAdminPassword(password)) {
+  const email = parseBoundedText(req.body?.["email"], 254)?.toLowerCase();
+  const passwordValue = req.body?.["password"];
+  const password =
+    typeof passwordValue === "string" && passwordValue.length <= 256 ? passwordValue : "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) {
     recordLoginFailure(req);
-    return res.status(401).json({ error: "بيانات تسجيل الدخول غير صحيحة" });
+    return res.status(401).json({ error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
   }
 
-  const sessionToken = createSessionToken();
-  if (!sessionToken) return res.status(503).json({ error: "لم يتم إعداد كلمة مرور المدير بعد" });
-  setSessionCookie(res, sessionToken);
-  return res.json({ authenticated: true, token: sessionToken });
+  const supabaseUrl = process.env["SUPABASE_URL"];
+  const publishableKey =
+    process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
+  if (!supabaseUrl || !publishableKey)
+    return res.status(503).json({ error: "إعداد اتصال Supabase Auth غير مكتمل" });
+
+  try {
+    const authClient = createClient(supabaseUrl, publishableKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      recordLoginFailure(req);
+      return res.status(401).json({ error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
+    }
+
+    const db = await adminDb();
+    const { data: membership, error: membershipError } = await db
+      .from("orchest_admin_users")
+      .select("user_id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+    if (membershipError) {
+      console.error("Admin membership lookup failed", membershipError.code);
+      return res.status(503).json({ error: "إعداد صلاحيات المديرين في Supabase غير مكتمل" });
+    }
+    if (!membership) {
+      recordLoginFailure(req);
+      return res
+        .status(403)
+        .json({ error: "تم تسجيل الحساب في Supabase، لكنه غير مخوّل بلوحة الإدارة" });
+    }
+
+    const sessionToken = createSessionToken(data.user.id);
+    if (!sessionToken)
+      return res.status(503).json({ error: "مفتاح جلسة المدير غير مهيأ على الخادم" });
+    setSessionCookie(res, sessionToken);
+    return res.json({ authenticated: true });
+  } catch (error) {
+    console.error("Supabase Auth login failed", error instanceof Error ? error.name : "unknown");
+    return res.status(503).json({ error: "تعذر الاتصال بخدمة Supabase Auth حالياً" });
+  }
 });
 
 app.get("/api/auth/session", (req, res) => {
@@ -784,9 +798,7 @@ async function rejectPersistentPublicRateLimit(
     return true;
   }
   try {
-    const fingerprint = createHmac("sha256", serviceRoleKey)
-      .update(getClientIp(req))
-      .digest("hex");
+    const fingerprint = createHmac("sha256", serviceRoleKey).update(getClientIp(req)).digest("hex");
     const db = await adminDb();
     // The RPC is installed via migration and is not part of the generated types.
     const rpc = db.rpc as unknown as (
@@ -828,7 +840,10 @@ app.post("/api/public/orders", async (req, res) => {
   const phone = str(body["phone"], 33).trim();
   const formStartedAt = Number(body["formStartedAt"]);
 
-  if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+  if (
+    !requestId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)
+  ) {
     return res.status(400).json({ error: "معرّف الطلب غير صالح" });
   }
   if (!trackId || !clientNames || !modificationType || !allowedOrderTypes.has(modificationType)) {
@@ -837,7 +852,12 @@ app.post("/api/public/orders", async (req, res) => {
   if (notes.length > 500 || phone.length > 32 || !isValidOrderDate(occasionDate)) {
     return res.status(400).json({ error: "تحقق من طول الملاحظات أو رقم التواصل أو التاريخ" });
   }
-  if (phone && (!/^[+\d\s().-]+$/.test(phone) || phone.replace(/\D/g, "").length < 8 || phone.replace(/\D/g, "").length > 15)) {
+  if (
+    phone &&
+    (!/^[+\d\s().-]+$/.test(phone) ||
+      phone.replace(/\D/g, "").length < 8 ||
+      phone.replace(/\D/g, "").length > 15)
+  ) {
     return res.status(400).json({ error: "رقم التواصل غير صالح" });
   }
   const elapsedMs = Date.now() - formStartedAt;
@@ -884,7 +904,8 @@ app.post("/api/public/events", async (req, res) => {
     return res.status(400).json({ error: "نوع الحدث غير مسموح" });
   }
   const trackId = eventType === "play" ? parseBoundedText(req.body?.["trackId"], 128) : null;
-  if (eventType === "play" && !trackId) return res.status(400).json({ error: "معرّف العمل غير صالح" });
+  if (eventType === "play" && !trackId)
+    return res.status(400).json({ error: "معرّف العمل غير صالح" });
   if (await rejectPersistentPublicRateLimit(req, res, "event", 90, 60)) return null;
 
   const db = await adminDb();
@@ -985,16 +1006,71 @@ app.post("/api/admin/orders", async (req, res) => {
   const session = requireAdmin(req, res);
   if (!session || !requireCsrf(req, res, session)) return null;
   const db = await adminDb();
+  const body = req.body ?? {};
+  const requestedLimit = Math.floor(num(body["limit"]));
+  const limit = Math.max(1, Math.min(100, requestedLimit || 25));
+  const requestedOffset = Math.floor(num(body["offset"]));
+  const offset = Math.max(0, Math.min(2_000_000, requestedOffset));
+  const search = str(body["search"], 100)
+    .trim()
+    .replace(/[,%()_*"'\\]/g, " ")
+    .trim();
+  const status = str(body["status"], 20);
+  const trackId = str(body["trackId"], 100);
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const dateFrom = str(body["dateFrom"], 10);
+  const dateTo = str(body["dateTo"], 10);
+  const isValidDate = (value: string) => {
+    if (!datePattern.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const includeMetrics = body["includeMetrics"] === true;
+
+  let orderQuery = db
+    .from("order_logs")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (["جديد", "قيد التنفيذ", "مكتمل"].includes(status))
+    orderQuery = orderQuery.eq("status", status);
+  if (trackId) orderQuery = orderQuery.eq("track_id", trackId);
+  if (search) {
+    orderQuery = orderQuery.or(
+      `client_names.ilike.%${search}%,names.ilike.%${search}%,track_title.ilike.%${search}%,track_code.ilike.%${search}%,phone.ilike.%${search}%`,
+    );
+  }
+  if (isValidDate(dateFrom)) {
+    orderQuery = orderQuery.gte("created_at", `${dateFrom}T00:00:00.000Z`);
+  }
+  if (isValidDate(dateTo)) {
+    const nextDay = new Date(`${dateTo}T00:00:00.000Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    orderQuery = orderQuery.lt("created_at", nextDay.toISOString());
+  }
   const [orders, visits, plays, leads] = await Promise.all([
-    db.from("order_logs").select("*").order("created_at", { ascending: false }).limit(500),
-    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "visit"),
-    db.from("analytics_events").select("id", { count: "exact", head: true }).eq("event_type", "play"),
-    db.from("order_logs").select("id", { count: "exact", head: true }),
+    orderQuery,
+    includeMetrics
+      ? db
+          .from("analytics_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_type", "visit")
+      : Promise.resolve({ count: 0, error: null }),
+    includeMetrics
+      ? db
+          .from("analytics_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_type", "play")
+      : Promise.resolve({ count: 0, error: null }),
+    includeMetrics
+      ? db.from("order_logs").select("id", { count: "exact", head: true })
+      : Promise.resolve({ count: 0, error: null }),
   ]);
   const error = orders.error || visits.error || plays.error || leads.error;
   if (error) return res.status(500).json({ error: error.message });
   return res.json({
     orders: orders.data ?? [],
+    totalOrders: orders.count ?? 0,
     visits: visits.count ?? 0,
     plays: plays.count ?? 0,
     whatsappLeads: leads.count ?? 0,
@@ -1011,6 +1087,60 @@ app.post("/api/admin/config", async (req, res) => {
   if (offers.error || theme.error)
     return res.status(500).json({ error: offers.error?.message ?? theme.error?.message });
   return res.json({ offers: offers.data ?? [], theme: theme.data?.[0] ?? null });
+});
+
+app.post("/api/admin/catalog", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const { data, error } = await db
+    .from("tracks")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ tracks: data ?? [] });
+});
+
+app.post("/api/admin/media-upload-url", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+
+  const kind = str(req.body?.["kind"], 20);
+  const contentType = str(req.body?.["contentType"], 100).toLowerCase();
+  const size = num(req.body?.["size"]);
+  const extensionByType: Record<string, string> = {
+    "image/webp": "webp",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
+  };
+  const maxSize = kind === "image" ? 2 * 1024 * 1024 : 30 * 1024 * 1024;
+  if (
+    !["image", "audio"].includes(kind) ||
+    !extensionByType[contentType] ||
+    (kind === "image" && !contentType.startsWith("image/")) ||
+    (kind === "audio" && !contentType.startsWith("audio/")) ||
+    !Number.isSafeInteger(size) ||
+    size < 1 ||
+    size > maxSize
+  ) {
+    return res.status(400).json({ error: "نوع الملف أو حجمه غير مدعوم." });
+  }
+
+  const folder = kind === "image" ? "images" : "audio";
+  const path = `${folder}/${Date.now()}-${randomBytes(12).toString("hex")}.${extensionByType[contentType]}`;
+  const db = await adminDb();
+  const storage = db.storage.from("orchest-media");
+  const { data, error } = await storage.createSignedUploadUrl(path, { upsert: false });
+  if (error) return res.status(503).json({ error: "تعذر تجهيز مساحة رفع الملف." });
+  const { data: publicData } = storage.getPublicUrl(path);
+  return res.json({ signedUrl: data.signedUrl, publicUrl: publicData.publicUrl });
 });
 
 app.post("/api/admin/mutate", async (req, res) => {
@@ -1109,6 +1239,7 @@ app.post("/api/admin/mutate", async (req, res) => {
         description: str(t["description"]),
         audio_frequency: t["audioFreq"] == null ? null : num(t["audioFreq"]),
         lyrics: str(t["lyrics"], 5000) || null,
+        ...(t["isPublished"] === false ? { is_published: false } : {}),
       }));
       break;
     }
@@ -1132,6 +1263,7 @@ app.post("/api/admin/mutate", async (req, res) => {
           duration_sec: dur,
           duration_seconds: dur,
           duration_formatted: fmt,
+          audio_url: str(t["audioUrl"], 2000),
           cover_image: cover,
           cover_url: cover,
           rhythm,
@@ -1156,6 +1288,12 @@ app.post("/api/admin/mutate", async (req, res) => {
       ({ error } = await db
         .from("tracks")
         .update({ is_trend: Boolean(b["value"]) })
+        .eq("id", str(b["id"], 100)));
+      break;
+    case "setTrackPublished":
+      ({ error } = await db
+        .from("tracks")
+        .update({ is_published: Boolean(b["value"]), updated_at: new Date().toISOString() })
         .eq("id", str(b["id"], 100)));
       break;
     case "addArtist": {
@@ -1241,6 +1379,200 @@ app.post("/api/admin/mutate", async (req, res) => {
     default:
       return res.status(400).json({ error: "عملية غير معروفة" });
   }
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    const migrationRequired = error.message.includes("is_published");
+    return res.status(migrationRequired ? 503 : 500).json({
+      error: migrationRequired
+        ? "لتفعيل المسودات والإخفاء، يلزم تطبيق ترحيل حالة النشر على قاعدة البيانات."
+        : error.message,
+    });
+  }
   return res.json({ ok: true });
+});
+
+app.post("/api/admin/entities", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const [categories, artists] = await Promise.all([
+    db.from("categories").select("*").order("sort_order", { ascending: true }).limit(500),
+    db.from("artists").select("*").order("sort_order", { ascending: true }).limit(500),
+  ]);
+  if (categories.error || artists.error)
+    return res.status(503).json({ error: "تعذر تحميل بيانات الإدارة من Supabase." });
+  return res.json({ categories: categories.data ?? [], artists: artists.data ?? [] });
+});
+
+const giftOccasions = new Set(["wedding", "sheila", "newborn", "welcome", "other"]);
+const giftAudioExtensions: Record<string, string> = {
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/ogg": "ogg",
+  "audio/webm": "webm",
+};
+
+function normalizeRecipientPhone(value: unknown): string | null {
+  const digits = str(value, 40).replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
+function hashGiftToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function newGiftToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+app.post("/api/admin/gifts/list", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const db = await adminDb();
+  const { data, error } = await db
+    .from("gift_deliveries")
+    .select("id,title,occasion_type,recipient_name,recipient_phone,greeting,created_at,is_active")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return res.status(503).json({ error: "تعذر تحميل سجل بطاقات التسليم." });
+  return res.json({ deliveries: data ?? [] });
+});
+
+app.post("/api/admin/gifts/upload-url", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const contentType = str(req.body?.["contentType"], 100).toLowerCase();
+  const size = num(req.body?.["size"]);
+  if (
+    !giftAudioExtensions[contentType] ||
+    !Number.isSafeInteger(size) ||
+    size < 1 ||
+    size > 30 * 1024 * 1024
+  ) {
+    return res.status(400).json({ error: "اختر ملفاً صوتياً مدعوماً لا يتجاوز 30 ميجابايت." });
+  }
+  const path = `deliveries/${session.userId}/${randomBytes(16).toString("hex")}.${giftAudioExtensions[contentType]}`;
+  const db = await adminDb();
+  const { data, error } = await db.storage
+    .from("orchest-gifts")
+    .createSignedUploadUrl(path, { upsert: false });
+  if (error || !data?.token) {
+    console.error("Gift upload URL creation failed", error?.statusCode ?? "unknown");
+    return res.status(503).json({ error: "تعذر تجهيز رفع الملف الخاص." });
+  }
+  return res.json({ path, token: data.token });
+});
+
+app.post("/api/admin/gifts", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const title = parseBoundedText(req.body?.["title"], 160);
+  const occasionType = str(req.body?.["occasionType"], 30);
+  const recipientName = parseBoundedText(req.body?.["recipientName"], 120) ?? "";
+  const recipientPhone = normalizeRecipientPhone(req.body?.["recipientPhone"]);
+  const greeting = parseBoundedText(req.body?.["greeting"], 700);
+  const storagePath = str(req.body?.["storagePath"], 256);
+  if (!title || !giftOccasions.has(occasionType) || !recipientPhone || !greeting) {
+    return res
+      .status(400)
+      .json({ error: "أكمل عنوان العمل ونوع المناسبة ورقم الجهة ورسالة التهنئة." });
+  }
+  const expectedPrefix = `deliveries/${session.userId}/`;
+  if (
+    !storagePath.startsWith(expectedPrefix) ||
+    !/^deliveries\/[0-9a-f-]{36}\/[a-f0-9]{32}\.(mp3|m4a|aac|wav|ogg|webm)$/i.test(storagePath)
+  ) {
+    return res.status(400).json({ error: "مسار الملف المرفوع غير صالح لهذه الجلسة." });
+  }
+
+  const db = await adminDb();
+  const storage = db.storage.from("orchest-gifts");
+  const { error: fileError } = await storage.createSignedUrl(storagePath, 60);
+  if (fileError) return res.status(400).json({ error: "لم يكتمل رفع الملف الصوتي بعد." });
+
+  const token = newGiftToken();
+  const { data, error } = await db
+    .from("gift_deliveries")
+    .insert({
+      token_hash: hashGiftToken(token),
+      storage_path: storagePath,
+      title,
+      occasion_type: occasionType,
+      recipient_name: recipientName || null,
+      recipient_phone: recipientPhone,
+      greeting,
+      created_by: session.userId,
+    })
+    .select("id,title,occasion_type,recipient_name,recipient_phone,greeting,created_at,is_active")
+    .single();
+  if (error || !data) {
+    console.error("Gift delivery creation failed", error?.code ?? "unknown");
+    await storage.remove([storagePath]).catch(() => undefined);
+    return res.status(503).json({ error: "تعذر حفظ بطاقة التسليم في قاعدة البيانات." });
+  }
+  return res.json({ delivery: data, token, giftPath: `/gift/${token}` });
+});
+
+app.post("/api/admin/gifts/rotate", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const id = str(req.body?.["id"], 64);
+  if (!/^[0-9a-f-]{36}$/i.test(id))
+    return res.status(400).json({ error: "معرّف التسليم غير صالح." });
+  const db = await adminDb();
+  const { data: existing, error: findError } = await db
+    .from("gift_deliveries")
+    .select("id,title,occasion_type,recipient_name,recipient_phone,greeting,is_active")
+    .eq("id", id)
+    .maybeSingle();
+  if (findError || !existing || !existing.is_active)
+    return res.status(404).json({ error: "بطاقة التسليم غير موجودة أو موقوفة." });
+  const token = newGiftToken();
+  const { error } = await db
+    .from("gift_deliveries")
+    .update({ token_hash: hashGiftToken(token) })
+    .eq("id", id);
+  if (error) return res.status(503).json({ error: "تعذر تجديد رمز البطاقة." });
+  return res.json({ delivery: existing, token, giftPath: `/gift/${token}` });
+});
+
+app.post("/api/admin/gifts/revoke", async (req, res) => {
+  const session = requireAdmin(req, res);
+  if (!session || !requireCsrf(req, res, session)) return null;
+  const id = str(req.body?.["id"], 64);
+  if (!/^[0-9a-f-]{36}$/i.test(id))
+    return res.status(400).json({ error: "معرّف التسليم غير صالح." });
+  const db = await adminDb();
+  const { error } = await db.from("gift_deliveries").update({ is_active: false }).eq("id", id);
+  if (error) return res.status(503).json({ error: "تعذر إيقاف رابط البطاقة." });
+  return res.json({ ok: true });
+});
+
+app.get("/api/gifts/:token", async (req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  const token = req.params["token"] ?? "";
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token))
+    return res.status(404).json({ error: "البطاقة غير متاحة." });
+  const db = await adminDb();
+  const { data, error } = await db
+    .from("gift_deliveries")
+    .select("title,occasion_type,recipient_name,greeting,storage_path,is_active")
+    .eq("token_hash", hashGiftToken(token))
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error || !data) return res.status(404).json({ error: "رابط البطاقة غير صالح أو تم إيقافه." });
+  const { data: audio, error: audioError } = await db.storage
+    .from("orchest-gifts")
+    .createSignedUrl(data.storage_path, 60 * 60);
+  if (audioError || !audio?.signedUrl)
+    return res.status(503).json({ error: "تعذر تجهيز تشغيل الملف حالياً." });
+  return res.json({
+    title: data.title,
+    occasionType: data.occasion_type,
+    recipientName: data.recipient_name,
+    greeting: data.greeting,
+    audioUrl: audio.signedUrl,
+  });
 });

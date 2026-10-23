@@ -1,21 +1,21 @@
-import { adminHeaders } from '../utils/adminAuth';
-import { toast } from 'sonner';
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Headphones, 
-  MessageCircle, 
-  TrendingUp, 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  Sparkles, 
-  Upload, 
-  Youtube, 
-  CheckCircle, 
-  Clock, 
-  Search, 
-  Filter, 
+import { adminHeaders } from "../utils/adminAuth";
+import { toast } from "sonner";
+import React, { useEffect, useState } from "react";
+import {
+  Users,
+  Headphones,
+  MessageCircle,
+  TrendingUp,
+  Plus,
+  Trash2,
+  Edit3,
+  Sparkles,
+  Upload,
+  Youtube,
+  CheckCircle,
+  Clock,
+  Search,
+  Filter,
   ChevronLeft,
   X,
   Settings,
@@ -25,10 +25,13 @@ import {
   Database,
   Phone,
   Check,
+  Eye,
+  EyeOff,
   AlertCircle,
   Layers,
-  FolderPlus
-} from 'lucide-react';
+  FolderPlus,
+  Gift,
+} from "lucide-react";
 import {
   Track,
   Artist,
@@ -41,19 +44,27 @@ import {
   OfferPackage,
   AppThemeSettings,
 } from "../types/index";
-import { 
-  formatCommas, 
-  validateWhatsAppNumber, 
-  exportOrdersToCSV, 
-  exportFullBackupJSON 
-} from '../utils/trackLogic';
-import { ImageUploader } from './ImageUploader';
+import {
+  formatCommas,
+  parseDuration,
+  validateWhatsAppNumber,
+  exportOrdersToCSV,
+  exportFullBackupJSON,
+} from "../utils/trackLogic";
+import { ImageUploader } from "./ImageUploader";
 import { OffersAdminPanel } from "./OffersAdminPanel";
+import { GiftDeliveryPanel } from "./GiftDeliveryPanel";
+import { uploadMediaFile } from "../services/mediaUpload";
+import { adminLoadAllOrders, type AdminOrdersQuery } from "../services/catalogDb";
+
+const ORDERS_PAGE_SIZE = 25;
 
 interface AdminDashboardProps {
   tracks: Track[];
   artists: Artist[];
   orders: OrderRequest[];
+  totalOrders: number;
+  onLoadOrders: (query: AdminOrdersQuery) => Promise<{ orders: OrderRequest[]; total: number }>;
   categories: Category[];
   offers: OfferPackage[];
   themeSettings: AppThemeSettings;
@@ -63,6 +74,7 @@ interface AdminDashboardProps {
   onAddTrack: (newTrack: Track) => void;
   onUpdateTrack: (track: Track) => void;
   onDeleteTrack: (id: string) => void;
+  onToggleTrackPublished: (id: string) => void;
   onToggleTrend: (id: string) => void;
   onAddCategory: (newCategory: Category) => void;
   onAddArtist: (artist: Artist) => void;
@@ -70,7 +82,7 @@ interface AdminDashboardProps {
   onDeleteArtist: (id: string) => void;
   onDeleteCategory: (categoryId: string) => void;
   onReorderCategories: (fromId: string, toId: string) => void;
-  onUpdateOrderStatus: (id: string, status: OrderRequest['status']) => void;
+  onUpdateOrderStatus: (id: string, status: OrderRequest["status"]) => void;
   theme: ThemeMode;
   csrfToken: string;
   onLogout: () => void;
@@ -89,6 +101,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tracks,
   artists,
   orders,
+  totalOrders,
+  onLoadOrders,
   categories,
   offers,
   themeSettings,
@@ -98,6 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddTrack,
   onUpdateTrack,
   onDeleteTrack,
+  onToggleTrackPublished,
   onToggleTrend,
   onAddCategory,
   onAddArtist,
@@ -116,17 +131,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "tracks" | "artists" | "categories" | "offers" | "orders" | "analytics" | "settings"
+    "tracks" | "artists" | "categories" | "offers" | "gifts" | "orders" | "analytics" | "settings"
   >("tracks");
-  const [searchTerm, setSearchTerm] = useState('');
-  const [orderSearch, setOrderSearch] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<'الكل' | OrderRequest['status']>('الكل');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState<"الكل" | OrderRequest["status"]>(
+    "الكل",
+  );
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
+  const [orderTrackFilter, setOrderTrackFilter] = useState("الكل");
+  const [orderPage, setOrderPage] = useState(0);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersExporting, setOrdersExporting] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "orders") return;
+    const timer = window.setTimeout(() => {
+      setOrdersLoading(true);
+      void onLoadOrders({
+        offset: orderPage * ORDERS_PAGE_SIZE,
+        limit: ORDERS_PAGE_SIZE,
+        search: orderSearch.trim(),
+        status: orderStatusFilter,
+        dateFrom: orderDateFrom,
+        dateTo: orderDateTo,
+        trackId: orderTrackFilter === "الكل" ? "" : orderTrackFilter,
+      })
+        .catch((error) => {
+          toast.error("تعذر تحميل سجل الطلبات", {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        })
+        .finally(() => setOrdersLoading(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeTab,
+    onLoadOrders,
+    orderDateFrom,
+    orderDateTo,
+    orderPage,
+    orderSearch,
+    orderStatusFilter,
+    orderTrackFilter,
+  ]);
 
   // Settings & WhatsApp State
   const [inputWhatsApp, setInputWhatsApp] = useState(whatsappNumber);
   const [whatsAppSaveSuccess, setWhatsAppSaveSuccess] = useState(false);
   const [lastBackupDate, setLastBackupDate] = useState(() => {
-    return localStorage.getItem('orchest_last_backup') || '2026-10-15 14:00';
+    return localStorage.getItem("orchest_last_backup") || "";
   });
 
   // Validation for WhatsApp
@@ -144,11 +199,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDownloadBackupJSON = () => {
     const backupData = {
       exportedAt: new Date().toISOString(),
-      studioName: 'أوركست ستوديو | Orchest Studio',
+      studioName: "أوركست ستوديو | Orchest Studio",
       settings: {
         whatsappNumber,
-        currency: 'SAR',
-        platformStatus: 'active',
+        currency: "SAR",
+        platformStatus: "active",
       },
       tracks,
       categories,
@@ -156,72 +211,147 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
 
     const jsonString = exportFullBackupJSON(backupData);
-    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const blob = new Blob([jsonString], { type: "application/json;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const link = document.createElement("a");
+    const nowStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     link.href = url;
-    link.setAttribute('download', `orchest_backup_${nowStr}.json`);
+    link.setAttribute("download", `orchest_backup_${nowStr}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    const nowFormatted = new Date().toLocaleString('ar-SA');
+    const nowFormatted = new Date().toLocaleString("ar-SA");
     setLastBackupDate(nowFormatted);
-    localStorage.setItem('orchest_last_backup', nowFormatted);
+    localStorage.setItem("orchest_last_backup", nowFormatted);
   };
 
-  const handleDownloadOrdersCSV = () => {
-    const csvContent = exportOrdersToCSV(orders);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    link.href = url;
-    link.setAttribute('download', `orchest_orders_${nowStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadOrdersCSV = async () => {
+    setOrdersExporting(true);
+    try {
+      const allMatchingOrders = await adminLoadAllOrders(csrfToken, {
+        search: orderSearch.trim(),
+        status: orderStatusFilter,
+        dateFrom: orderDateFrom,
+        dateTo: orderDateTo,
+        trackId: orderTrackFilter === "الكل" ? "" : orderTrackFilter,
+      });
+      const csvContent = exportOrdersToCSV(allMatchingOrders);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const nowStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      link.href = url;
+      link.setAttribute("download", `orchest_orders_${nowStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`تم تصدير ${allMatchingOrders.length} طلب`);
+    } catch (error) {
+      toast.error("تعذر تصدير سجل الطلبات", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setOrdersExporting(false);
+    }
 
-    const nowFormatted = new Date().toLocaleString('ar-SA');
+    const nowFormatted = new Date().toLocaleString("ar-SA");
     setLastBackupDate(nowFormatted);
-    localStorage.setItem('orchest_last_backup', nowFormatted);
+    localStorage.setItem("orchest_last_backup", nowFormatted);
   };
 
   // New track form state
-  const [newTitle, setNewTitle] = useState('');
-  const [newArtist, setNewArtist] = useState('');
-  const [newCode, setNewCode] = useState(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
-  const [newCategory, setNewCategory] = useState<CategoryId>('zaffat-bride');
-  const [newRhythm, setNewRhythm] = useState<RhythmType>('بدون موسيقى');
-  const [newDuration, setNewDuration] = useState('04:30');
-  const [newCoverUrl, setNewCoverUrl] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [newTitle, setNewTitle] = useState("");
+  const [newArtist, setNewArtist] = useState("");
+  const [newCode, setNewCode] = useState("");
+  const [newCategory, setNewCategory] = useState<CategoryId>("zaffat-bride");
+  const [newRhythm, setNewRhythm] = useState<RhythmType>("بدون موسيقى");
+  const [newDuration, setNewDuration] = useState("");
+  const [newCoverUrl, setNewCoverUrl] = useState("");
+  const [newAudioUrl, setNewAudioUrl] = useState("");
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
+  const [isAudioUploading, setIsAudioUploading] = useState(false);
+  const [audioRetryFile, setAudioRetryFile] = useState<File | null>(null);
+  const [newDescription, setNewDescription] = useState("");
   const [isNewTrend, setIsNewTrend] = useState(false);
+  const [isPublished, setIsPublished] = useState(true);
+  const [showTrackPreview, setShowTrackPreview] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [generatedSeo, setGeneratedSeo] = useState<GeneratedSeo | null>(null);
 
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
+
+  const handleAudioUpload = async (inputFile: File) => {
+    const extension = inputFile.name.split(".").pop()?.toLowerCase() ?? "";
+    const typeByExtension: Record<string, string> = {
+      mp3: "audio/mpeg",
+      m4a: "audio/mp4",
+      mp4: "audio/mp4",
+      aac: "audio/aac",
+      wav: "audio/wav",
+      ogg: "audio/ogg",
+      webm: "audio/webm",
+    };
+    const file = inputFile.type
+      ? inputFile
+      : new File([inputFile], inputFile.name, {
+          type: typeByExtension[extension] ?? "",
+        });
+    const allowedTypes = [
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/aac",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/ogg",
+      "audio/webm",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      setAudioUploadError("صيغة الملف الصوتي غير مدعومة. اختر MP3 أو M4A أو WAV أو OGG.");
+      setAudioRetryFile(null);
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setAudioUploadError("حجم الملف الصوتي يتجاوز الحد الأقصى وهو 30 ميجابايت.");
+      setAudioRetryFile(null);
+      return;
+    }
+
+    setAudioUploadError(null);
+    setAudioRetryFile(file);
+    setAudioUploadProgress(0);
+    setIsAudioUploading(true);
+    try {
+      const url = await uploadMediaFile(file, csrfToken, "audio", setAudioUploadProgress);
+      setNewAudioUrl(url);
+      setAudioRetryFile(null);
+    } catch (error) {
+      setAudioUploadError(error instanceof Error ? error.message : "تعذر رفع الملف الصوتي.");
+    } finally {
+      setIsAudioUploading(false);
+    }
+  };
 
   // Artists management state
   const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
   const [editingArtistId, setEditingArtistId] = useState<string | null>(null);
-  const [artistName, setArtistName] = useState('');
-  const [artistRole, setArtistRole] = useState('');
-  const [artistBio, setArtistBio] = useState('');
-  const [artistAvatar, setArtistAvatar] = useState('');
-  const [artistGenres, setArtistGenres] = useState('');
+  const [artistName, setArtistName] = useState("");
+  const [artistRole, setArtistRole] = useState("");
+  const [artistBio, setArtistBio] = useState("");
+  const [artistAvatar, setArtistAvatar] = useState("");
+  const [artistGenres, setArtistGenres] = useState("");
   const [artistVerified, setArtistVerified] = useState(false);
 
   const resetArtistForm = () => {
     setEditingArtistId(null);
-    setArtistName('');
-    setArtistRole('');
-    setArtistBio('');
-    setArtistAvatar('');
-    setArtistGenres('');
+    setArtistName("");
+    setArtistRole("");
+    setArtistBio("");
+    setArtistAvatar("");
+    setArtistGenres("");
     setArtistVerified(false);
   };
 
@@ -231,7 +361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setArtistRole(artist.role);
     setArtistBio(artist.bio);
     setArtistAvatar(artist.avatar);
-    setArtistGenres(artist.genres.join('، '));
+    setArtistGenres(artist.genres.join("، "));
     setArtistVerified(Boolean(artist.isVerified));
     setIsArtistModalOpen(true);
   };
@@ -239,7 +369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveArtist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!artistName.trim()) {
-      toast.error('يرجى إدخال اسم الفنان');
+      toast.error("يرجى إدخال اسم الفنان");
       return;
     }
     const genres = artistGenres
@@ -250,9 +380,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const artist: Artist = {
       id: existing?.id ?? `artist-${Date.now()}`,
       name: artistName.trim(),
-      role: artistRole.trim() || 'منشد',
+      role: artistRole.trim() || "منشد",
       bio: artistBio.trim(),
-      avatar: artistAvatar.trim() || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      avatar: artistAvatar.trim(),
       genres,
       isVerified: artistVerified,
       totalStreams: existing?.totalStreams ?? 0,
@@ -267,14 +397,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Categories management state
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatDescription, setNewCatDescription] = useState('');
-  const [newCatImage, setNewCatImage] = useState('');
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatDescription, setNewCatDescription] = useState("");
+  const [newCatImage, setNewCatImage] = useState("");
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) {
-      toast.error('يرجى إدخال اسم التصنيف');
+      toast.error("يرجى إدخال اسم التصنيف");
       return;
     }
 
@@ -282,28 +412,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const newCat: Category = {
       id: slug,
       name: newCatName.trim(),
-      description: newCatDescription.trim() || 'تصنيف مخصص تم إنشاؤه عبر لوحة تحكم الاستوديو',
-      image: newCatImage.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+      description: newCatDescription.trim() || "تصنيف مخصص تم إنشاؤه عبر لوحة تحكم الاستوديو",
+      image: newCatImage.trim(),
       count: 0,
     };
 
     onAddCategory(newCat);
     setIsAddCategoryModalOpen(false);
-    setNewCatName('');
-    setNewCatDescription('');
-    setNewCatImage('');
+    setNewCatName("");
+    setNewCatDescription("");
+    setNewCatImage("");
   };
 
   const resetTrackForm = () => {
-    setNewTitle('');
-    setNewArtist('');
-    setNewDescription('');
+    setNewTitle("");
+    setNewArtist("");
+    setNewDescription("");
     setGeneratedSeo(null);
-    setNewCoverUrl('');
-    setNewCode(`#ORC-${Math.floor(100 + Math.random() * 900)}`);
-    setNewDuration('04:30');
-    setNewRhythm('بدون موسيقى');
+    setNewCoverUrl("");
+    setNewAudioUrl("");
+    setAudioUploadProgress(0);
+    setAudioUploadError(null);
+    setAudioRetryFile(null);
+    setNewCode("");
+    setNewDuration("");
+    setNewRhythm("بدون موسيقى");
     setIsNewTrend(false);
+    setIsPublished(true);
+    setShowTrackPreview(false);
     setEditingTrackId(null);
   };
 
@@ -312,12 +448,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewTitle(track.title);
     setNewArtist(track.artist);
     setNewCode(track.code);
-    setNewCategory(track.categoryId || categories[0]?.id || '');
+    setNewCategory(track.categoryId || categories[0]?.id || "");
     setNewRhythm(track.rhythm);
     setNewDuration(track.durationFormatted);
     setNewCoverUrl(track.coverUrl);
+    setNewAudioUrl(track.audioUrl ?? "");
+    setAudioUploadProgress(0);
+    setAudioUploadError(null);
+    setAudioRetryFile(null);
     setNewDescription(track.description);
     setIsNewTrend(Boolean(track.isTrend));
+    setIsPublished(track.isPublished !== false);
+    setShowTrackPreview(false);
     setGeneratedSeo(null);
     setIsAddModalOpen(true);
   };
@@ -325,17 +467,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateTrack = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim()) {
-      toast.error('يرجى إدخال اسم العمل واسم المنشد');
+      toast.error("يرجى إدخال اسم العمل واسم المنشد");
+      return;
+    }
+    if (!newCode.trim()) {
+      toast.error("يرجى إدخال كود العمل");
+      return;
+    }
+    const durationSeconds = parseDuration(newDuration);
+    if (durationSeconds == null) {
+      toast.error("أدخل مدة صحيحة بصيغة دقائق:ثوانٍ، مثل 04:30");
       return;
     }
 
     const matchingCat = categories.find((c) => c.id === newCategory);
-    const categoryLabel = matchingCat ? matchingCat.name : 'زفات';
+    const categoryLabel = matchingCat ? matchingCat.name : "زفات";
 
     if (editingTrackId) {
       const existing = tracks.find((t) => t.id === editingTrackId);
       if (!existing) {
-        toast.error('تعذر العثور على العمل المطلوب تعديله');
+        toast.error("تعذر العثور على العمل المطلوب تعديله");
         return;
       }
       const updated: Track = {
@@ -348,7 +499,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         categoryId: newCategory,
         categoryLabel,
         coverUrl: newCoverUrl.trim() || existing.coverUrl,
+        audioUrl: newAudioUrl.trim(),
         isTrend: isNewTrend,
+        isPublished,
         description: newDescription.trim() || existing.description,
       };
       onUpdateTrack(updated);
@@ -362,21 +515,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       title: newTitle.trim(),
       artist: newArtist.trim(),
       code: newCode.trim(),
-      duration: 270,
-      durationFormatted: newDuration,
+      duration: durationSeconds,
+      durationFormatted: newDuration.trim(),
       playsCount: 0,
       likesCount: 0,
       rhythm: newRhythm,
       categoryId: newCategory,
       categoryLabel,
-      coverUrl: newCoverUrl.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+      coverUrl: newCoverUrl.trim(),
+      ...(newAudioUrl.trim() ? { audioUrl: newAudioUrl.trim() } : {}),
       isTrend: isNewTrend,
-      isExclusive: true,
-      executionDays: 'تُحدّد بعد مراجعة تفاصيل الطلب',
-      suitableFor: ['زفاف', 'مناسبة خاصة'],
+      isPublished,
+      isExclusive: false,
+      executionDays: "",
+      suitableFor: [],
       createdAt: new Date().toISOString().substring(0, 10),
-      description: newDescription.trim() || 'عمل صوتي تم إنشاؤه وتوزيعه عبر استوديو أوركست الخليجي',
-      audioFreq: 261.63,
+      description: newDescription.trim(),
     };
 
     onAddTrack(created);
@@ -386,22 +540,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const filteredTracks = tracks.filter(
     (t) =>
-      t.title.includes(searchTerm) ||
-      t.artist.includes(searchTerm) ||
-      t.code.includes(searchTerm)
+      t.title.includes(searchTerm) || t.artist.includes(searchTerm) || t.code.includes(searchTerm),
   );
 
-  const filteredOrders = orders.filter((o) => {
-    if (orderStatusFilter !== 'الكل' && o.status !== orderStatusFilter) return false;
-    if (!orderSearch.trim()) return true;
-    const q = orderSearch.trim();
-    return (
-      o.clientNames.includes(q) ||
-      o.trackTitle.includes(q) ||
-      o.trackCode.includes(q) ||
-      (o.phone ?? '').includes(q)
-    );
-  });
+  const filteredOrders = orders;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -459,7 +601,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Card 1: إجمالي الزيارات */}
         <div
           className={`p-5 rounded-2xl border transition-all ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="flex items-center justify-between text-gray-400 text-xs mb-3">
@@ -475,7 +617,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Card 2: الاستماعات */}
         <div
           className={`p-5 rounded-2xl border transition-all ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="flex items-center justify-between text-gray-400 text-xs mb-3">
@@ -491,7 +633,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Card 3: طلبات واتساب */}
         <div
           className={`p-5 rounded-2xl border transition-all ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="flex items-center justify-between text-gray-400 text-xs mb-3">
@@ -507,7 +649,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Card 4: نسبة التحويل */}
         <div
           className={`p-5 rounded-2xl border transition-all ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="flex items-center justify-between text-gray-400 text-xs mb-3">
@@ -524,32 +666,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Tabs navigation */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-4 mb-6">
         <button
-          onClick={() => setActiveTab('tracks')}
+          onClick={() => setActiveTab("tracks")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'tracks'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "tracks"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           إدارة الأعمال الصوتية ({tracks.length})
         </button>
         <button
-          onClick={() => setActiveTab('artists')}
+          onClick={() => setActiveTab("artists")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'artists'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "artists"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           <Users className="w-4 h-4" />
           <span>الفنانون ({artists.length})</span>
         </button>
         <button
-          onClick={() => setActiveTab('categories')}
+          onClick={() => setActiveTab("categories")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'categories'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "categories"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           <Layers className="w-4 h-4" />
@@ -567,31 +709,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span>العروض والثيمات ({offers.length})</span>
         </button>
         <button
-          onClick={() => setActiveTab('orders')}
+          onClick={() => setActiveTab("orders")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'orders'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "orders"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           سجل طلبات واتساب ({orders.length})
         </button>
         <button
-          onClick={() => setActiveTab('analytics')}
+          onClick={() => setActiveTab("gifts")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === "gifts"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          بطاقة التسليم
+        </button>
+        <button
+          onClick={() => setActiveTab("analytics")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'analytics'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "analytics"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           التحليلات والمخططات
         </button>
         <button
-          onClick={() => setActiveTab('settings')}
+          onClick={() => setActiveTab("settings")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'settings'
-              ? 'bg-[#D4AF37] text-black shadow-md'
-              : 'text-gray-400 hover:text-white'
+            activeTab === "settings"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           <Settings className="w-4 h-4" />
@@ -600,10 +753,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Tab 1: Media Manager Table */}
-      {activeTab === 'tracks' && (
+      {activeTab === "tracks" && (
         <div
           className={`rounded-2xl border overflow-hidden ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           {/* Table Search & Controls */}
@@ -616,7 +769,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث في الأعمال..."
                 className={`w-full pr-9 pl-4 py-2 text-sm rounded-xl border outline-none ${
-                  isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                  isDark
+                    ? "bg-black/40 border-white/10 text-white"
+                    : "bg-gray-50 border-black/10 text-black"
                 }`}
               />
             </div>
@@ -627,7 +782,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <table className="w-full text-right text-sm">
               <thead
                 className={`text-xs uppercase font-medium border-b ${
-                  isDark ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-gray-50 border-black/10 text-gray-600'
+                  isDark
+                    ? "bg-white/5 border-white/10 text-gray-400"
+                    : "bg-gray-50 border-black/10 text-gray-600"
                 }`}
               >
                 <tr>
@@ -644,7 +801,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <tr
                     key={tr.id}
                     className={`transition-colors ${
-                      isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'
+                      isDark ? "hover:bg-white/5" : "hover:bg-gray-50"
                     }`}
                   >
                     <td className="p-4 flex items-center gap-3">
@@ -656,15 +813,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div>
                         <div className="font-bold text-sm">{tr.title}</div>
                         <div className="text-xs text-gray-400">
-                          {tr.artist} • <span dir="ltr" className="font-mono text-[#D4AF37]">{tr.code}</span>
+                          {tr.artist} •{" "}
+                          <span dir="ltr" className="font-mono text-[#D4AF37]">
+                            {tr.code}
+                          </span>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 text-xs">{tr.categoryLabel}</td>
                     <td className="p-4 text-xs font-semibold">{tr.rhythm}</td>
                     <td className="p-4">
-                      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        نشط
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                          tr.isPublished === false
+                            ? "bg-gray-500/15 text-gray-400 border-gray-500/30"
+                            : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                        }`}
+                      >
+                        {tr.isPublished === false ? "مخفي" : "منشور"}
                       </span>
                     </td>
                     <td className="p-4">
@@ -672,8 +838,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={() => onToggleTrend(tr.id)}
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                           tr.isTrend
-                            ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40'
-                            : 'bg-black/5 dark:bg-white/5 text-gray-400 hover:text-white'
+                            ? "bg-amber-500/20 text-amber-500 border border-amber-500/40"
+                            : "bg-black/5 dark:bg-white/5 text-gray-400 hover:text-white"
                         }`}
                       >
                         {tr.isTrend ? (
@@ -696,6 +862,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => onToggleTrackPublished(tr.id)}
+                          aria-label={
+                            tr.isPublished === false ? `نشر ${tr.title}` : `إخفاء ${tr.title}`
+                          }
+                          title={tr.isPublished === false ? "نشر العمل" : "إخفاء مؤقت"}
+                          className="p-1.5 rounded-lg text-sky-400 hover:bg-sky-500/10 cursor-pointer"
+                        >
+                          {tr.isPublished === false ? (
+                            <Eye className="w-4 h-4" />
+                          ) : (
+                            <EyeOff className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
                           onClick={() => onDeleteTrack(tr.id)}
                           aria-label={`حذف ${tr.title}`}
                           className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
@@ -713,10 +893,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* Tab: Artists Management (إدارة الفنانين) */}
-      {activeTab === 'artists' && (
+      {activeTab === "artists" && (
         <div
           className={`rounded-2xl border overflow-hidden ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
@@ -741,7 +921,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div
                 key={artist.id}
                 className={`p-4 rounded-2xl border flex items-start gap-3 ${
-                  isDark ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-black/10'
+                  isDark ? "bg-black/30 border-white/10" : "bg-gray-50 border-black/10"
                 }`}
               >
                 <img
@@ -752,11 +932,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-sm truncate">{artist.name}</span>
-                    {artist.isVerified && <CheckCircle className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />}
+                    {artist.isVerified && (
+                      <CheckCircle className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                    )}
                   </div>
                   <p className="text-xs text-[#D4AF37]">{artist.role}</p>
                   <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{artist.bio}</p>
-                  <p className="text-[10px] text-gray-500 mt-1">{artist.tracksCount ?? 0} عمل مسجل</p>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    {artist.tracksCount ?? 0} عمل مسجل
+                  </p>
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <button
@@ -786,7 +970,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* Tab: Categories Management (إدارة التصنيفات) */}
-      {activeTab === 'categories' && (
+      {activeTab === "categories" && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white/5 border border-white/10">
             <div>
@@ -795,7 +979,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>تصنيفات المنصة والأقسام الصوتية</span>
               </h3>
               <p className="text-xs text-gray-400 mt-1">
-                إدارة أقسام الزفات والشيلات، وتحديد أغلفة الأقسام من ملفاتك المحلية أو معرض الاستوديو
+                إدارة أقسام الزفات والشيلات، وتحديد أغلفة الأقسام من ملفاتك المحلية أو معرض
+                الاستوديو
               </p>
             </div>
             <button
@@ -810,7 +995,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {categories.map((cat) => {
               const catTracksCount = tracks.filter((t) => t.categoryId === cat.id).length;
-              const isDefaultSystemCategory = ['zaffat-bride', 'zaffat-dufoof', 'sheilat-enthusiastic', 'welcoming', 'babies'].includes(cat.id);
+              const isDefaultSystemCategory = [
+                "zaffat-bride",
+                "zaffat-dufoof",
+                "sheilat-enthusiastic",
+                "welcoming",
+                "babies",
+              ].includes(cat.id);
 
               return (
                 <div
@@ -824,8 +1015,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }}
                   onDragEnd={() => setDraggedCategoryId(null)}
                   title="اسحب لإعادة الترتيب"
-                  className={`${draggedCategoryId === cat.id ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing group relative rounded-3xl border overflow-hidden flex flex-col justify-between transition-all duration-300 ${
-                    isDark ? 'bg-[#16161C] border-white/10 hover:border-[#D4AF37]/50' : 'bg-white border-black/10 hover:border-[#B89728]/50 shadow-sm'
+                  className={`${draggedCategoryId === cat.id ? "opacity-50" : ""} cursor-grab active:cursor-grabbing group relative rounded-3xl border overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+                    isDark
+                      ? "bg-[#16161C] border-white/10 hover:border-[#D4AF37]/50"
+                      : "bg-white border-black/10 hover:border-[#B89728]/50 shadow-sm"
                   }`}
                 >
                   <div className="relative aspect-video w-full overflow-hidden">
@@ -885,20 +1078,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
+      {activeTab === "gifts" && <GiftDeliveryPanel csrfToken={csrfToken} theme={theme} />}
+
       {/* Tab 2: WhatsApp Order Logs matching Screenshot 1 & 3 */}
-      {activeTab === 'orders' && (
+      {activeTab === "orders" && (
         <div
           className={`rounded-2xl border overflow-hidden ${
-            isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+            isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
           }`}
         >
           <div className="p-4 border-b border-white/10 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <MessageCircle className="w-4 h-4 text-[#25D366]" />
                 <span>سجل طلبات واتساب الواردة من الزوار</span>
               </h3>
-              <span className="text-xs text-gray-400">{filteredOrders.length} من {orders.length} طلب</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">
+                  {totalOrders === 0 ? 0 : orderPage * ORDERS_PAGE_SIZE + 1}–
+                  {Math.min(orderPage * ORDERS_PAGE_SIZE + filteredOrders.length, totalOrders)} من{" "}
+                  {totalOrders} طلب
+                  {ordersLoading ? " · جارٍ التحديث…" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadOrdersCSV()}
+                  disabled={ordersExporting}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#D4AF37] disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {ordersExporting ? "جارٍ تجهيز التصدير…" : "تصدير كل النتائج المطابقة"}
+                </button>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="relative flex-1 max-w-sm">
@@ -906,25 +1117,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="بحث بالاسم أو العمل أو الكود..."
+                  onChange={(e) => {
+                    setOrderPage(0);
+                    setOrderSearch(e.target.value);
+                  }}
+                  placeholder="بحث بالاسم أو رقم التواصل أو العمل أو الكود..."
                   className={`w-full pr-9 pl-4 py-2 text-sm rounded-xl border outline-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
               <div className="flex items-center gap-1.5">
-                {(['الكل', 'جديد', 'قيد التنفيذ', 'مكتمل'] as const).map((st) => (
+                {(["الكل", "جديد", "قيد التنفيذ", "مكتمل"] as const).map((st) => (
                   <button
                     key={st}
                     type="button"
-                    onClick={() => setOrderStatusFilter(st)}
+                    onClick={() => {
+                      setOrderPage(0);
+                      setOrderStatusFilter(st);
+                    }}
                     className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       orderStatusFilter === st
-                        ? 'bg-[#D4AF37] text-black shadow-sm'
+                        ? "bg-[#D4AF37] text-black shadow-sm"
                         : isDark
-                          ? 'bg-white/5 text-gray-400 hover:text-white'
-                          : 'bg-black/5 text-gray-500 hover:text-black'
+                          ? "bg-white/5 text-gray-400 hover:text-white"
+                          : "bg-black/5 text-gray-500 hover:text-black"
                     }`}
                   >
                     {st}
@@ -932,13 +1151,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 ))}
               </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>من تاريخ</span>
+                <input
+                  type="date"
+                  value={orderDateFrom}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderDateFrom(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
+                  }`}
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>إلى تاريخ</span>
+                <input
+                  type="date"
+                  value={orderDateTo}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderDateTo(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
+                  }`}
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-gray-400">
+                <span>العمل الصوتي</span>
+                <select
+                  value={orderTrackFilter}
+                  onChange={(event) => {
+                    setOrderPage(0);
+                    setOrderTrackFilter(event.target.value);
+                  }}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-xs outline-none ${
+                    isDark
+                      ? "bg-[#16161C] border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
+                  }`}
+                >
+                  <option value="الكل">كل الأعمال</option>
+                  {tracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.title} · {track.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
               <thead
                 className={`text-xs uppercase font-medium border-b ${
-                  isDark ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-gray-50 border-black/10 text-gray-600'
+                  isDark
+                    ? "bg-white/5 border-white/10 text-gray-400"
+                    : "bg-gray-50 border-black/10 text-gray-600"
                 }`}
               >
                 <tr>
@@ -955,28 +1232,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <tr
                     key={ord.id}
                     className={`transition-colors ${
-                      isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'
+                      isDark ? "hover:bg-white/5" : "hover:bg-gray-50"
                     }`}
                   >
                     <td className="p-4 text-xs font-mono text-gray-400">{ord.timestamp}</td>
                     <td className="p-4 font-bold">{ord.clientNames}</td>
                     <td className="p-4">
                       <span className="font-semibold">{ord.trackTitle}</span>
-                      <span className="text-xs font-mono text-[#D4AF37] mr-1.5">{ord.trackCode}</span>
+                      <span className="text-xs font-mono text-[#D4AF37] mr-1.5">
+                        {ord.trackCode}
+                      </span>
                     </td>
                     <td className="p-4 text-xs">{ord.modificationType}</td>
                     <td className="p-4">
                       <button
                         type="button"
-                        onClick={() => onUpdateOrderStatus(ord.id, ord.status === 'جديد' ? 'قيد التنفيذ' : ord.status === 'قيد التنفيذ' ? 'مكتمل' : 'جديد')}
+                        onClick={() =>
+                          onUpdateOrderStatus(
+                            ord.id,
+                            ord.status === "جديد"
+                              ? "قيد التنفيذ"
+                              : ord.status === "قيد التنفيذ"
+                                ? "مكتمل"
+                                : "جديد",
+                          )
+                        }
                         title="اضغط لتغيير الحالة"
                         aria-label={`تغيير حالة الطلب، الحالة الحالية ${ord.status}`}
                         className={`cursor-pointer hover:opacity-80 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                          ord.status === 'مكتمل'
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : ord.status === 'قيد التنفيذ'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-emerald-500/20 text-emerald-400'
+                          ord.status === "مكتمل"
+                            ? "bg-blue-500/20 text-blue-400"
+                            : ord.status === "قيد التنفيذ"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "bg-emerald-500/20 text-emerald-400"
                         }`}
                       >
                         {ord.status} ↻
@@ -984,7 +1272,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="p-4 text-center">
                       <a
-                        href={`https://wa.me/${(ord.phone ?? '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً أستاذ ${ord.clientNames}، بخصوص طلبكم لـ ${ord.trackTitle}`)}`}
+                        href={`https://wa.me/${(ord.phone ?? "").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`مرحباً أستاذ ${ord.clientNames}، بخصوص طلبكم لـ ${ord.trackTitle}`)}`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#25D366]/20 text-[#25D366] hover:bg-[#25D366]/30 text-xs font-bold"
@@ -1005,42 +1293,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tbody>
             </table>
           </div>
+          <div className="flex items-center justify-between gap-3 border-t border-white/10 p-3">
+            <button
+              type="button"
+              disabled={orderPage === 0 || ordersLoading}
+              onClick={() => setOrderPage((page) => Math.max(0, page - 1))}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              الطلبات الأحدث
+            </button>
+            <span className="text-xs text-gray-400">
+              صفحة {totalOrders === 0 ? 0 : orderPage + 1} من{" "}
+              {Math.max(1, Math.ceil(totalOrders / ORDERS_PAGE_SIZE))}
+            </span>
+            <button
+              type="button"
+              disabled={(orderPage + 1) * ORDERS_PAGE_SIZE >= totalOrders || ordersLoading}
+              onClick={() => setOrderPage((page) => page + 1)}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              الطلبات الأقدم
+            </button>
+          </div>
         </div>
       )}
 
       {/* Tab 3: Analytics based on persisted catalog and event data */}
-      {activeTab === 'analytics' && (
+      {activeTab === "analytics" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div
             className={`p-6 rounded-2xl border ${
-              isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+              isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
             }`}
           >
             <h3 className="font-bold text-lg mb-2">الأعمال المسجلة حسب التصنيف</h3>
-            <p className="text-xs text-gray-400 mb-6">الأعداد محسوبة من الأعمال الموجودة فعلياً في الكتالوج.</p>
+            <p className="text-xs text-gray-400 mb-6">
+              الأعداد محسوبة من الأعمال الموجودة فعلياً في الكتالوج.
+            </p>
             <div className="space-y-3">
               {categories.map((category) => (
-                <div key={category.id} className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
+                <div
+                  key={category.id}
+                  className="flex items-center justify-between gap-4 border-b border-white/5 pb-3"
+                >
                   <span className="text-sm font-semibold">{category.name}</span>
-                  <span className="font-mono font-bold text-[#D4AF37]">{category.count.toLocaleString()}</span>
+                  <span className="font-mono font-bold text-[#D4AF37]">
+                    {category.count.toLocaleString()}
+                  </span>
                 </div>
               ))}
-              {categories.length === 0 && <p className="text-sm text-gray-400">لا توجد تصنيفات محمّلة حالياً.</p>}
+              {categories.length === 0 && (
+                <p className="text-sm text-gray-400">لا توجد تصنيفات محمّلة حالياً.</p>
+              )}
             </div>
           </div>
 
           <div
             className={`p-6 rounded-2xl border ${
-              isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+              isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
             }`}
           >
             <h3 className="font-bold text-lg mb-2">ملخص النشاط المسجّل</h3>
-            <p className="text-xs text-gray-400 mb-6">الإجماليات التالية مأخوذة من سجلات قاعدة البيانات؛ الاستماعات تبدأ من تفعيل تسجيلها.</p>
+            <p className="text-xs text-gray-400 mb-6">
+              الإجماليات التالية مأخوذة من سجلات قاعدة البيانات؛ الاستماعات تبدأ من تفعيل تسجيلها.
+            </p>
             <dl className="space-y-3">
-              <div className="flex justify-between"><dt>زيارات مسجلة</dt><dd className="font-mono">{formatCommas(kpi.totalVisits)}</dd></div>
-              <div className="flex justify-between"><dt>مرات تشغيل مسجلة</dt><dd className="font-mono">{formatCommas(kpi.totalStreams)}</dd></div>
-              <div className="flex justify-between"><dt>طلبات تواصل محفوظة</dt><dd className="font-mono">{formatCommas(kpi.whatsappLeads)}</dd></div>
-              <div className="flex justify-between"><dt>معدل الطلبات إلى الزيارات</dt><dd className="font-mono">{kpi.conversionRate}%</dd></div>
+              <div className="flex justify-between">
+                <dt>زيارات مسجلة</dt>
+                <dd className="font-mono">{formatCommas(kpi.totalVisits)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>مرات تشغيل مسجلة</dt>
+                <dd className="font-mono">{formatCommas(kpi.totalStreams)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>طلبات تواصل محفوظة</dt>
+                <dd className="font-mono">{formatCommas(kpi.whatsappLeads)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>معدل الطلبات إلى الزيارات</dt>
+                <dd className="font-mono">{kpi.conversionRate}%</dd>
+              </div>
             </dl>
             <p className="mt-6 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 p-4 text-xs leading-relaxed text-gray-300">
               لا نعرض ترتيباً للأعمال أو نسب نمو زمنية قبل توفر بيانات محفوظة كافية لهذه المقارنات.
@@ -1050,12 +1383,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* Tab 4: Settings & System Backups matching user specification */}
-      {activeTab === 'settings' && (
+      {activeTab === "settings" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Card 1: بطاقة رقم الواتساب المعتمد للطلبات */}
           <div
             className={`p-6 sm:p-8 rounded-3xl border ${
-              isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+              isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
             }`}
           >
             <div className="flex items-center gap-3 mb-4">
@@ -1086,11 +1419,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                     placeholder="+966500000000 أو 967770000000"
                     className={`w-full px-4 py-3 rounded-xl border text-sm font-mono tracking-wider outline-none transition-all ${
-                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     } ${
                       phoneValidation.isValid
-                        ? 'focus:border-[#25D366] focus:ring-1 focus:ring-[#25D366]'
-                        : 'focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                        ? "focus:border-[#25D366] focus:ring-1 focus:ring-[#25D366]"
+                        : "focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
                     }`}
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1139,11 +1474,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <a
-                  href={`https://wa.me/${phoneValidation.sanitized}?text=${encodeURIComponent('تجربة رابط الواتساب من لوحة تحكم أوركست')}`}
+                  href={`https://wa.me/${phoneValidation.sanitized}?text=${encodeURIComponent("تجربة رابط الواتساب من لوحة تحكم أوركست")}`}
                   target="_blank"
                   rel="noreferrer"
                   className={`w-full sm:w-auto px-4 py-3 rounded-xl border text-xs font-semibold text-center transition-all ${
-                    isDark ? 'border-white/10 hover:bg-white/5 text-gray-300' : 'border-black/10 hover:bg-gray-100 text-gray-700'
+                    isDark
+                      ? "border-white/10 hover:bg-white/5 text-gray-300"
+                      : "border-black/10 hover:bg-gray-100 text-gray-700"
                   }`}
                 >
                   اختبار فتح الرقم 💬
@@ -1151,7 +1488,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="p-3.5 rounded-2xl bg-[#D4AF37]/5 border border-[#D4AF37]/20 text-[11px] leading-relaxed text-gray-400">
-                🔒 يتم حفظ الرقم في إعدادات المنصة العامة (Settings)، وتتغير روابط الطلبات في كل بطاقة عمل وصفحة التفاصيل ونموذج الطلب الذكي في نفس اللحظة بدون الحاجة لإعادة نشر التطبيق.
+                🔒 يتم حفظ الرقم في إعدادات المنصة العامة (Settings)، وتتغير روابط الطلبات في كل
+                بطاقة عمل وصفحة التفاصيل ونموذج الطلب الذكي في نفس اللحظة بدون الحاجة لإعادة نشر
+                التطبيق.
               </div>
             </form>
           </div>
@@ -1159,7 +1498,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Card 2: بطاقة النسخ الاحتياطي وتصدير البيانات (System Backups) */}
           <div
             className={`p-6 sm:p-8 rounded-3xl border flex flex-col justify-between ${
-              isDark ? 'bg-[#16161C] border-white/10' : 'bg-white border-black/10 shadow-sm'
+              isDark ? "bg-[#16161C] border-white/10" : "bg-white border-black/10 shadow-sm"
             }`}
           >
             <div>
@@ -1177,15 +1516,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Summary Stats */}
               <div className="grid grid-cols-3 gap-3 my-6">
-                <div className={`p-3 rounded-xl border text-center ${isDark ? 'bg-black/30 border-white/5' : 'bg-gray-50 border-black/5'}`}>
+                <div
+                  className={`p-3 rounded-xl border text-center ${isDark ? "bg-black/30 border-white/5" : "bg-gray-50 border-black/5"}`}
+                >
                   <div className="text-xs text-gray-400 mb-1">الأعمال الصوتية</div>
-                  <div className="font-bold font-mono text-base text-[#D4AF37]">{tracks.length}</div>
+                  <div className="font-bold font-mono text-base text-[#D4AF37]">
+                    {tracks.length}
+                  </div>
                 </div>
-                <div className={`p-3 rounded-xl border text-center ${isDark ? 'bg-black/30 border-white/5' : 'bg-gray-50 border-black/5'}`}>
+                <div
+                  className={`p-3 rounded-xl border text-center ${isDark ? "bg-black/30 border-white/5" : "bg-gray-50 border-black/5"}`}
+                >
                   <div className="text-xs text-gray-400 mb-1">طلبات العملاء</div>
-                  <div className="font-bold font-mono text-base text-[#25D366]">{orders.length}</div>
+                  <div className="font-bold font-mono text-base text-[#25D366]">
+                    {orders.length}
+                  </div>
                 </div>
-                <div className={`p-3 rounded-xl border text-center ${isDark ? 'bg-black/30 border-white/5' : 'bg-gray-50 border-black/5'}`}>
+                <div
+                  className={`p-3 rounded-xl border text-center ${isDark ? "bg-black/30 border-white/5" : "bg-gray-50 border-black/5"}`}
+                >
                   <div className="text-xs text-gray-400 mb-1">التصنيفات</div>
                   <div className="font-bold font-mono text-base">{categories.length}</div>
                 </div>
@@ -1219,7 +1568,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>تاريخ آخر نسخة احتياطية:</span>
               </span>
-              <span className="font-mono text-gray-300 font-semibold">{lastBackupDate}</span>
+              <span className="font-mono text-gray-300 font-semibold">
+                {lastBackupDate || "لم تُنشأ نسخة احتياطية بعد"}
+              </span>
             </div>
           </div>
         </div>
@@ -1228,19 +1579,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Modal: Add New Track (إضافة عمل جديد) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div
+            onClick={() => {
+              setIsAddModalOpen(false);
+              resetTrackForm();
+            }}
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+          />
 
           <div
-            className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
-              isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+            className={`relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
+              isDark
+                ? "bg-[#16161C] border-white/10 text-white"
+                : "bg-white border-black/10 text-black"
             }`}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
               <h3 className="font-bold text-lg">
-                {editingTrackId ? 'تعديل بيانات العمل الصوتي' : 'إضافة عمل صوتي جديد إلى أوركست'}
+                {editingTrackId ? "تعديل بيانات العمل الصوتي" : "إضافة عمل صوتي جديد إلى أوركست"}
               </h3>
               <button
-                onClick={() => { setIsAddModalOpen(false); resetTrackForm(); }}
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  resetTrackForm();
+                }}
                 aria-label="إغلاق النافذة"
                 className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
               >
@@ -1258,7 +1620,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="مثال: زفة مسك العروس"
                   className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
@@ -1273,7 +1637,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setNewArtist(e.target.value)}
                     placeholder="مثال: محمد العتيبي"
                     className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   />
                 </div>
@@ -1284,7 +1650,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
                     className={`w-full px-3 py-2 text-sm rounded-xl border font-mono outline-none ${
-                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   />
                 </div>
@@ -1297,7 +1665,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value as CategoryId)}
                     className={`w-full px-3 py-2 text-sm rounded-xl border outline-none cursor-pointer ${
-                      isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-[#16161C] border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   >
                     {categories.map((cat) => (
@@ -1314,13 +1684,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={newRhythm}
                     onChange={(e) => setNewRhythm(e.target.value as RhythmType)}
                     className={`w-full px-3 py-2 text-sm rounded-xl border outline-none cursor-pointer ${
-                      isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-[#16161C] border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   >
                     <option value="بدون موسيقى">بدون موسيقى</option>
                     <option value="دفوف">دفوف</option>
                     <option value="أوركسترا">أوركسترا</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">المدة (دقائق:ثوانٍ)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newDuration}
+                    onChange={(e) => setNewDuration(e.target.value)}
+                    placeholder="مثال: 04:30"
+                    pattern="^\d{1,3}:[0-5]\d$"
+                    className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
+                    }`}
+                  />
                 </div>
               </div>
 
@@ -1329,9 +1717,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={newCoverUrl}
                   onSelectImage={setNewCoverUrl}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="صورة غلاف العمل (رفع ملف محلي أو اختيار من المعرض)"
                   recommendedAspect="موصى به: 800×800 بكسل"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold">الملف الصوتي (اختياري)</label>
+                <input
+                  type="url"
+                  value={newAudioUrl}
+                  onChange={(event) => setNewAudioUrl(event.target.value)}
+                  placeholder="يمكن لصق رابط صوتي أو رفع ملف من الجهاز"
+                  className={`w-full rounded-xl border px-3 py-2 text-xs outline-none ${
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
+                  }`}
+                />
+                <input
+                  type="file"
+                  accept=".mp3,.m4a,.mp4,.aac,.wav,.ogg,.webm,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,audio/webm"
+                  disabled={isAudioUploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleAudioUpload(file);
+                    event.target.value = "";
+                  }}
+                  className="block w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-[#D4AF37]/15 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#D4AF37]"
+                />
+                <p className="text-[11px] text-gray-400">
+                  تُرفع الملفات إلى مساحة التخزين مباشرةً، بحد أقصى 30 ميجابايت.
+                </p>
+                {isAudioUploading && (
+                  <div className="space-y-1" role="status" aria-live="polite">
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>رفع الملف الصوتي</span>
+                      <span>{audioUploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-[#D4AF37] transition-all"
+                        style={{ width: `${audioUploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {audioUploadError && (
+                  <div className="flex items-center justify-between gap-2" role="alert">
+                    <p className="text-xs text-rose-400">{audioUploadError}</p>
+                    {audioRetryFile && (
+                      <button
+                        type="button"
+                        disabled={isAudioUploading}
+                        onClick={() => void handleAudioUpload(audioRetryFile)}
+                        className="shrink-0 rounded-lg border border-rose-400/30 px-2.5 py-1 text-[11px] font-bold text-rose-400 disabled:opacity-50"
+                      >
+                        إعادة المحاولة
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1360,12 +1807,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={async () => {
                       setIsGeneratingAi(true);
                       try {
-                        const res = await fetch('/api/ai/generate-seo', {
-                          method: 'POST',
-                          credentials: 'include',
+                        const res = await fetch("/api/ai/generate-seo", {
+                          method: "POST",
+                          credentials: "include",
                           headers: adminHeaders({
-                            'Content-Type': 'application/json',
-                            'X-CSRF-Token': csrfToken,
+                            "Content-Type": "application/json",
+                            "X-CSRF-Token": csrfToken,
                           }),
                           body: JSON.stringify({
                             title: newTitle,
@@ -1382,14 +1829,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }
                         }
                       } catch (err) {
-                        console.error('Failed to generate SEO', err);
+                        console.error("Failed to generate SEO", err);
                       } finally {
                         setIsGeneratingAi(false);
                       }
                     }}
                     className="px-3 py-1.5 rounded-xl bg-[#D4AF37] hover:bg-[#c29f2f] text-black text-xs font-bold transition-all disabled:opacity-40 cursor-pointer shadow-xs"
                   >
-                    {isGeneratingAi ? 'جاري التوليد...' : 'توليد تلقائي ✨'}
+                    {isGeneratingAi ? "جاري التوليد..." : "توليد تلقائي ✨"}
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-400">
@@ -1400,17 +1847,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {generatedSeo && (
                   <div className="mt-3 pt-3 border-t border-white/10 space-y-2 text-xs">
                     <div>
-                      <span className="text-[10px] text-[#D4AF37] block font-mono">Meta SEO Title:</span>
+                      <span className="text-[10px] text-[#D4AF37] block font-mono">
+                        Meta SEO Title:
+                      </span>
                       <p className="text-gray-300 font-semibold">{generatedSeo.metaTitle}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#D4AF37] block font-mono">Meta Description:</span>
+                      <span className="text-[10px] text-[#D4AF37] block font-mono">
+                        Meta Description:
+                      </span>
                       <p className="text-gray-400 text-[11px]">{generatedSeo.metaDescription}</p>
                     </div>
                     {generatedSeo.recommendedTags && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {generatedSeo.recommendedTags.map((tag: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 rounded bg-white/10 text-[10px] text-gray-300">
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded bg-white/10 text-[10px] text-gray-300"
+                          >
                             #{tag}
                           </span>
                         ))}
@@ -1428,16 +1882,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setNewDescription(e.target.value)}
                   placeholder="الوصف التسويقي يظهر في صفحة تفاصيل العمل..."
                   className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
+              </div>
+
+              <label
+                className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
+                  isDark ? "border-white/10 bg-white/5" : "border-black/10 bg-gray-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  className="mt-0.5 accent-[#D4AF37]"
+                />
+                <span>
+                  <span className="block text-xs font-bold">نشر العمل للزوار</span>
+                  <span className="mt-1 block text-[11px] text-gray-400">
+                    عند إلغاء الاختيار يُحفظ العمل كمسودة ويظل ظاهراً للمدير فقط.
+                  </span>
+                </span>
+              </label>
+
+              <div>
+                <button
+                  type="button"
+                  aria-expanded={showTrackPreview}
+                  onClick={() => setShowTrackPreview((visible) => !visible)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#D4AF37]/40 px-3 py-2 text-xs font-bold text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer"
+                >
+                  <Eye className="w-4 h-4" />
+                  {showTrackPreview ? "إخفاء المعاينة" : "معاينة العمل قبل الحفظ"}
+                </button>
+                {showTrackPreview && (
+                  <div
+                    className={`mt-3 flex gap-3 rounded-2xl border p-3 ${
+                      isDark ? "border-white/10 bg-black/30" : "border-black/10 bg-white"
+                    }`}
+                  >
+                    {newCoverUrl ||
+                    tracks.find((track) => track.id === editingTrackId)?.coverUrl ? (
+                      <img
+                        src={
+                          newCoverUrl ||
+                          tracks.find((track) => track.id === editingTrackId)?.coverUrl ||
+                          ""
+                        }
+                        alt={newTitle.trim() || "غلاف العمل"}
+                        className="h-20 w-20 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-black/10 text-center text-[10px] text-gray-400 dark:bg-white/10">
+                        لا توجد صورة
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold">{newTitle.trim() || "اسم العمل"}</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {newArtist.trim() || "اسم المنشد"}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {categories.find((category) => category.id === newCategory)?.name ??
+                          "التصنيف"}{" "}
+                        · {newRhythm}
+                      </p>
+                      <span
+                        className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] ${
+                          isPublished
+                            ? "bg-emerald-500/15 text-emerald-500"
+                            : "bg-gray-500/15 text-gray-400"
+                        }`}
+                      >
+                        {isPublished ? "سيظهر للزوار بعد الحفظ" : "سيُحفظ كمسودة مخفية"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
                 type="submit"
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-4"
               >
-                {editingTrackId ? 'حفظ التعديلات' : 'حفظ وإضافة العمل'}
+                {editingTrackId ? "حفظ التعديلات" : "حفظ وإضافة العمل"}
               </button>
             </form>
           </div>
@@ -1447,19 +1978,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Modal: Add/Edit Artist (إضافة أو تعديل فنان) */}
       {isArtistModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div
+            onClick={() => {
+              setIsArtistModalOpen(false);
+              resetArtistForm();
+            }}
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+          />
 
           <div
             className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl max-h-[90vh] overflow-y-auto ${
-              isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+              isDark
+                ? "bg-[#16161C] border-white/10 text-white"
+                : "bg-white border-black/10 text-black"
             }`}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
               <h3 className="font-bold text-lg">
-                {editingArtistId ? 'تعديل بيانات الفنان' : 'إضافة فنان جديد إلى الاستوديو'}
+                {editingArtistId ? "تعديل بيانات الفنان" : "إضافة فنان جديد إلى الاستوديو"}
               </h3>
               <button
-                onClick={() => { setIsArtistModalOpen(false); resetArtistForm(); }}
+                onClick={() => {
+                  setIsArtistModalOpen(false);
+                  resetArtistForm();
+                }}
                 aria-label="إغلاق النافذة"
                 className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
               >
@@ -1478,7 +2020,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setArtistName(e.target.value)}
                     placeholder="مثال: محمد العتيبي"
                     className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   />
                 </div>
@@ -1490,7 +2034,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setArtistRole(e.target.value)}
                     placeholder="مثال: منشد رئيسي"
                     className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                      isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                      isDark
+                        ? "bg-black/40 border-white/10 text-white"
+                        : "bg-gray-50 border-black/10 text-black"
                     }`}
                   />
                 </div>
@@ -1504,20 +2050,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setArtistBio(e.target.value)}
                   placeholder="نبذة قصيرة عن الفنان تظهر في صفحته..."
                   className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold mb-1">الأنماط (افصل بينها بفاصلة)</label>
+                <label className="block text-xs font-semibold mb-1">
+                  الأنماط (افصل بينها بفاصلة)
+                </label>
                 <input
                   type="text"
                   value={artistGenres}
                   onChange={(e) => setArtistGenres(e.target.value)}
                   placeholder="مثال: زفات، شيلات، أوركسترا"
                   className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
@@ -1527,6 +2079,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={artistAvatar}
                   onSelectImage={setArtistAvatar}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="الصورة الشخصية للفنان"
                   recommendedAspect="موصى به: 400×400 بكسل"
                 />
@@ -1549,7 +2102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="submit"
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-bold text-sm shadow-lg hover:bg-[#c29f2f] cursor-pointer mt-2"
               >
-                {editingArtistId ? 'حفظ التعديلات' : 'حفظ وإضافة الفنان'}
+                {editingArtistId ? "حفظ التعديلات" : "حفظ وإضافة الفنان"}
               </button>
             </form>
           </div>
@@ -1559,11 +2112,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Modal: Add New Category (إضافة تصنيف جديد) */}
       {isAddCategoryModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setIsAddCategoryModalOpen(false)} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div
+            onClick={() => setIsAddCategoryModalOpen(false)}
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+          />
 
           <div
             className={`relative w-full max-w-lg rounded-3xl border p-6 sm:p-8 z-10 shadow-2xl ${
-              isDark ? 'bg-[#16161C] border-white/10 text-white' : 'bg-white border-black/10 text-black'
+              isDark
+                ? "bg-[#16161C] border-white/10 text-white"
+                : "bg-white border-black/10 text-black"
             }`}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
@@ -1582,7 +2140,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <form onSubmit={handleCreateCategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold mb-1">اسم التصنيف (مثل: زفات ملكة، تخرج، استقبال VIP)</label>
+                <label className="block text-xs font-semibold mb-1">
+                  اسم التصنيف (مثل: زفات ملكة، تخرج، استقبال VIP)
+                </label>
                 <input
                   type="text"
                   required
@@ -1590,7 +2150,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setNewCatName(e.target.value)}
                   placeholder="مثال: زفات استقبال ملكية"
                   className={`w-full px-3 py-2 text-sm rounded-xl border outline-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
@@ -1603,7 +2165,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setNewCatDescription(e.target.value)}
                   placeholder="وصف تسويقي للتصنيف يظهر في الصفحة الرئيسية وصفحة الكتالوج..."
                   className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none ${
-                    isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-gray-50 border-black/10 text-black'
+                    isDark
+                      ? "bg-black/40 border-white/10 text-white"
+                      : "bg-gray-50 border-black/10 text-black"
                   }`}
                 />
               </div>
@@ -1613,6 +2177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   currentImage={newCatImage}
                   onSelectImage={setNewCatImage}
                   theme={theme}
+                  csrfToken={csrfToken}
                   label="صورة غلاف التصنيف (رفع ملف محلي أو اختيار من المعرض)"
                   recommendedAspect="موصى به: 800×600 بكسل"
                 />

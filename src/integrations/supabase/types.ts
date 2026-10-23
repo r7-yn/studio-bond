@@ -155,6 +155,54 @@ export type Database = {
         }
         Relationships: []
       }
+      gift_deliveries: {
+        Row: {
+          created_at: string
+          created_by: string
+          greeting: string
+          id: string
+          is_active: boolean
+          occasion_type: string
+          recipient_name: string | null
+          recipient_phone: string
+          storage_path: string
+          title: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          greeting: string
+          id?: string
+          is_active?: boolean
+          occasion_type: string
+          recipient_name?: string | null
+          recipient_phone: string
+          storage_path: string
+          title: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          greeting?: string
+          id?: string
+          is_active?: boolean
+          occasion_type?: string
+          recipient_name?: string | null
+          recipient_phone?: string
+          storage_path?: string
+          title?: string
+          token_hash?: string
+        }
+        Relationships: []
+      }
+      orchest_admin_users: {
+        Row: { created_at: string; user_id: string }
+        Insert: { created_at?: string; user_id: string }
+        Update: { created_at?: string; user_id?: string }
+        Relationships: []
+      }
       offers_packages: {
         Row: {
           badge: string | null
@@ -315,6 +363,7 @@ export type Database = {
           id: string
           is_exclusive: boolean
           is_featured: boolean | null
+          is_published: boolean
           is_trend: boolean
           likes_count: number | null
           lyrics: string | null
@@ -344,6 +393,7 @@ export type Database = {
           id: string
           is_exclusive?: boolean
           is_featured?: boolean | null
+          is_published?: boolean
           is_trend?: boolean
           likes_count?: number | null
           lyrics?: string | null
@@ -373,6 +423,7 @@ export type Database = {
           id?: string
           is_exclusive?: boolean
           is_featured?: boolean | null
+          is_published?: boolean
           is_trend?: boolean
           likes_count?: number | null
           lyrics?: string | null

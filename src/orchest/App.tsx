@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
 import { adminHeaders, clearAdminToken } from "./utils/adminAuth";
-import { INITIAL_TRACKS, INITIAL_KPI, STUDIO_WHATSAPP_NUMBER } from "./data/mockData";
 import {
   Track,
   CategoryId,
@@ -20,6 +19,7 @@ import {
   saveOrder,
   adminMutate,
   adminLoadConfig,
+  adminLoadEntities,
   adminLoadTracks,
   adminLoadOrders,
   type AdminOrdersQuery,
@@ -95,8 +95,13 @@ export default function App() {
   const [orders, setOrders] = useState<OrderRequest[]>([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const adminOrdersRequestId = useRef(0);
-  const [kpi, setKpi] = useState<KPIData>(INITIAL_KPI);
-  const [whatsappNumber, setWhatsappNumber] = useState<string>(STUDIO_WHATSAPP_NUMBER);
+  const [kpi, setKpi] = useState<KPIData>({
+    totalVisits: 0,
+    totalStreams: 0,
+    whatsappLeads: 0,
+    conversionRate: 0,
+  });
+  const [whatsappNumber, setWhatsappNumber] = useState<string>("");
   const [offers, setOffers] = useState<OfferPackage[]>([]);
   const [adminOffers, setAdminOffers] = useState<OfferPackage[]>([]);
   const [themeSettings, setThemeSettings] = useState<AppThemeSettings>({
@@ -117,7 +122,7 @@ export default function App() {
       setArtists(c.artists);
       setOffers(c.offers);
       setThemeSettings(c.themeSettings);
-      if (c.whatsappNumber) setWhatsappNumber(c.whatsappNumber);
+      setWhatsappNumber(c.whatsappNumber ?? "");
       setSelectedTrack((prev) => prev ?? c.tracks[0] ?? null);
       setSelectedArtist((prev) => prev ?? c.artists[0] ?? null);
       setCatalogError(null);
@@ -225,13 +230,16 @@ export default function App() {
 
   useEffect(() => {
     if (!adminCsrfToken) return;
-    adminLoadTracks(adminCsrfToken, categories)
-      .then((adminTracks) => {
+    void adminLoadEntities(adminCsrfToken)
+      .then(async (entities) => {
+        setCategories(entities.categories);
+        setArtists(entities.artists);
+        const adminTracks = await adminLoadTracks(adminCsrfToken, entities.categories);
         setTracks(adminTracks);
         setTracksTotal(adminTracks.length);
       })
       .catch((e) => console.error("Admin catalog load failed", e));
-  }, [adminCsrfToken, categories]);
+  }, [adminCsrfToken]);
 
   const handleLoadMoreTracks = async () => {
     if (isLoadingMoreTracks || tracks.length >= tracksTotal || isAdminAuthenticated) return;
@@ -323,9 +331,9 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem("orchest_favorites");
-      return saved ? JSON.parse(saved) : ["orc-204", "orc-305"];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ["orc-204", "orc-305"];
+      return [];
     }
   });
 
@@ -334,7 +342,7 @@ export default function App() {
 
   // Modals state
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [orderModalTrack, setOrderModalTrack] = useState<Track>(INITIAL_TRACKS[0] as Track);
+  const [orderModalTrack, setOrderModalTrack] = useState<Track | null>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isAiConciergeOpen, setIsAiConciergeOpen] = useState(false);
 
@@ -474,16 +482,12 @@ export default function App() {
     order: OrderRequest,
     guard: { formStartedAt: number; website: string },
   ) => {
+    if (!whatsappNumber.trim()) {
+      throw new Error("رقم واتساب غير مهيأ في إعدادات قاعدة البيانات؛ لم يُسجل الطلب.");
+    }
     await saveOrder(order, guard);
     setOrders((prev) => [order, ...prev]);
-    setKpi((prev) => {
-      const newLeads = prev.whatsappLeads + 1;
-      return {
-        ...prev,
-        whatsappLeads: newLeads,
-        conversionRate: calculateConversionRate(newLeads, prev.totalVisits),
-      };
-    });
+    if (adminCsrfToken) void loadAdminOrders({ offset: 0, limit: 25, includeMetrics: true });
     toast.success("تم حفظ الطلب", { description: "أكمل التأكيد في محادثة واتساب" });
   };
 
@@ -505,21 +509,6 @@ export default function App() {
         );
       }
     })();
-  };
-
-  const handleAddArtist = (artist: Artist) => {
-    setArtists((prev) => [...prev, artist]);
-    void persist({ action: "addArtist", artist }, "تم حفظ الفنان");
-  };
-
-  const handleUpdateArtist = (artist: Artist) => {
-    setArtists((prev) => prev.map((a) => (a.id === artist.id ? artist : a)));
-    void persist({ action: "updateArtist", artist }, "تم حفظ التعديلات");
-  };
-
-  const handleDeleteArtist = (id: string) => {
-    setArtists((prev) => prev.filter((a) => a.id !== id));
-    void persist({ action: "deleteArtist", id });
   };
 
   const handleDeleteTrack = (id: string) => {
@@ -1040,45 +1029,44 @@ export default function App() {
           (isAdminAuthenticated && adminCsrfToken ? (
             <Suspense
               fallback={
-                <div className="mx-auto max-w-7xl px-4 py-12 text-center text-sm text-gray-500" role="status">
+                <div
+                  className="mx-auto max-w-7xl px-4 py-12 text-center text-sm text-gray-500"
+                  role="status"
+                >
                   جارٍ تحميل لوحة الإدارة…
                 </div>
               }
             >
-            <AdminDashboard
-              tracks={tracks}
-              artists={artists}
-              orders={orders}
-              totalOrders={totalOrders}
-              categories={categories}
-              offers={adminOffers}
-              themeSettings={themeSettings}
-              kpi={kpi}
-              whatsappNumber={whatsappNumber}
-              onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
-              onAddTrack={handleAddTrack}
-              onUpdateTrack={handleUpdateTrack}
-              artists={artists}
-              onAddArtist={handleAddArtist}
-              onUpdateArtist={handleUpdateArtist}
-              onDeleteArtist={handleDeleteArtist}
-              onDeleteTrack={handleDeleteTrack}
-              onToggleTrackPublished={handleToggleTrackPublished}
-              onToggleTrend={handleToggleTrend}
-              onAddArtist={handleAddArtist}
-              onUpdateArtist={handleUpdateArtist}
-              onDeleteArtist={handleDeleteArtist}
-              onLoadOrders={loadAdminOrders}
-              onAddCategory={handleAddCategory}
-              onDeleteCategory={handleDeleteCategory}
-              onReorderCategories={handleReorderCategories}
-              onUpdateOrderStatus={handleUpdateOrderStatus}
-              theme={theme}
-              csrfToken={adminCsrfToken}
-              onLogout={handleAdminLogout}
-              onBackToStore={() => setCurrentView("home")}
-              onRefreshConfig={refreshAdminConfig}
-            />
+              <AdminDashboard
+                tracks={tracks}
+                artists={artists}
+                orders={orders}
+                totalOrders={totalOrders}
+                categories={categories}
+                offers={adminOffers}
+                themeSettings={themeSettings}
+                kpi={kpi}
+                whatsappNumber={whatsappNumber}
+                onUpdateWhatsAppNumber={handleUpdateWhatsAppNumber}
+                onAddTrack={handleAddTrack}
+                onUpdateTrack={handleUpdateTrack}
+                onDeleteTrack={handleDeleteTrack}
+                onToggleTrackPublished={handleToggleTrackPublished}
+                onToggleTrend={handleToggleTrend}
+                onAddArtist={handleAddArtist}
+                onUpdateArtist={handleUpdateArtist}
+                onDeleteArtist={handleDeleteArtist}
+                onLoadOrders={loadAdminOrders}
+                onAddCategory={handleAddCategory}
+                onDeleteCategory={handleDeleteCategory}
+                onReorderCategories={handleReorderCategories}
+                onUpdateOrderStatus={handleUpdateOrderStatus}
+                theme={theme}
+                csrfToken={adminCsrfToken}
+                onLogout={handleAdminLogout}
+                onBackToStore={() => setCurrentView("home")}
+                onRefreshConfig={refreshAdminConfig}
+              />
             </Suspense>
           ) : (
             <AdminLogin
@@ -1132,6 +1120,10 @@ export default function App() {
         }}
         favoritesCount={favorites.length}
         onWhatsAppContact={() => {
+          if (!whatsappNumber.trim()) {
+            toast.error("رقم واتساب غير مهيأ في قاعدة البيانات.");
+            return;
+          }
           window.open(
             generateWhatsAppUrl(
               whatsappNumber,
@@ -1144,14 +1136,16 @@ export default function App() {
       />
 
       {/* 4. Smart WhatsApp Order Modal (and Mobile Bottom Sheet) */}
-      <OrderModal
-        track={orderModalTrack}
-        isOpen={isOrderModalOpen}
-        onClose={() => setIsOrderModalOpen(false)}
-        onSubmitOrder={handleSubmitOrder}
-        theme={theme}
-        whatsappNumber={whatsappNumber}
-      />
+      {isOrderModalOpen && orderModalTrack && (
+        <OrderModal
+          track={orderModalTrack}
+          isOpen
+          onClose={() => setIsOrderModalOpen(false)}
+          onSubmitOrder={handleSubmitOrder}
+          theme={theme}
+          whatsappNumber={whatsappNumber}
+        />
+      )}
 
       <Toaster position="top-center" dir="rtl" richColors />
 

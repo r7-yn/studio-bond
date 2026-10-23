@@ -24,6 +24,7 @@ export interface Track {
   createdAt: string;
   description: string;
   audioFreq?: number; // base frequency for synth audio
+  isPublished?: boolean;
 }
 
 export interface Category {
@@ -103,3 +104,14 @@ export type ThemeMode = "dark" | "light";
 
 export type AppView =
   "home" | "catalog" | "track-details" | "admin" | "favorites" | "artists" | "artist-details";
+
+export interface GiftDeliveryRow {
+  id: string;
+  title: string;
+  occasion_type: string;
+  recipient_name: string | null;
+  recipient_phone: string;
+  greeting: string;
+  created_at: string;
+  is_active: boolean;
+}
