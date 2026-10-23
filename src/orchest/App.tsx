@@ -71,7 +71,10 @@ export default function App() {
   // App navigation state
   const [currentView, setCurrentView] = useState<AppView>(() => {
     try {
-      return sessionStorage.getItem("orchest_view") === "admin" ? "admin" : "home";
+      const requestedView = new URLSearchParams(window.location.search).get("view");
+      return requestedView === "admin" || sessionStorage.getItem("orchest_view") === "admin"
+        ? "admin"
+        : "home";
     } catch {
       return "home";
     }

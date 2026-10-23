@@ -203,6 +203,87 @@ export type Database = {
         Update: { created_at?: string; user_id?: string }
         Relationships: []
       }
+      admin_ai_audit_logs: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          evidence_refs: Json
+          id: string
+          model_status: string
+          needs_review: boolean
+          question_hash: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          evidence_refs?: Json
+          id?: string
+          model_status?: string
+          needs_review?: boolean
+          question_hash: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          evidence_refs?: Json
+          id?: string
+          model_status?: string
+          needs_review?: boolean
+          question_hash?: string
+        }
+        Relationships: []
+      }
+      admin_youtube_connections: {
+        Row: {
+          access_token_ciphertext: string
+          admin_user_id: string
+          channel_id: string
+          channel_title: string
+          created_at: string
+          id: string
+          last_error: string | null
+          last_sync_at: string | null
+          refresh_token_ciphertext: string | null
+          scopes: string[]
+          status: string
+          token_expires_at: string | null
+          updated_at: string
+          uploads_playlist_id: string
+        }
+        Insert: {
+          access_token_ciphertext: string
+          admin_user_id: string
+          channel_id: string
+          channel_title: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          refresh_token_ciphertext?: string | null
+          scopes?: string[]
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          uploads_playlist_id: string
+        }
+        Update: {
+          access_token_ciphertext?: string
+          admin_user_id?: string
+          channel_id?: string
+          channel_title?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          refresh_token_ciphertext?: string | null
+          scopes?: string[]
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          uploads_playlist_id?: string
+        }
+        Relationships: []
+      }
       offers_packages: {
         Row: {
           badge: string | null
@@ -343,6 +424,42 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          admin_user_id: string
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          is_active: boolean
+          last_seen_at: string
+          p256dh: string
+          user_agent: string | null
+        }
+        Insert: {
+          admin_user_id: string
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string
+          p256dh: string
+          user_agent?: string | null
+        }
+        Update: {
+          admin_user_id?: string
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string
+          p256dh?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       tracks: {
         Row: {
           artist: string
@@ -369,6 +486,9 @@ export type Database = {
           lyrics: string | null
           plays_count: number | null
           rhythm: string
+          source_provider: string
+          source_url: string | null
+          source_video_id: string | null
           suitable_for: Json
           title: string
           updated_at: string
@@ -399,6 +519,9 @@ export type Database = {
           lyrics?: string | null
           plays_count?: number | null
           rhythm?: string
+          source_provider?: string
+          source_url?: string | null
+          source_video_id?: string | null
           suitable_for?: Json
           title: string
           updated_at?: string
@@ -429,6 +552,9 @@ export type Database = {
           lyrics?: string | null
           plays_count?: number | null
           rhythm?: string
+          source_provider?: string
+          source_url?: string | null
+          source_video_id?: string | null
           suitable_for?: Json
           title?: string
           updated_at?: string

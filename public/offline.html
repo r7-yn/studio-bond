@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111116" />
+    <title>أوركست — لا يوجد اتصال</title>
+    <style>
+      :root { color-scheme: dark; font-family: Cairo, system-ui, sans-serif; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #111116; color: #fff; }
+      main { width: min(90vw, 34rem); padding: 2.5rem; text-align: center; border: 1px solid rgba(212,175,55,.28); border-radius: 2rem; background: #19191f; }
+      h1 { margin: 0 0 .75rem; color: #d4af37; }
+      p { color: rgba(255,255,255,.68); line-height: 1.9; }
+      button { border: 0; border-radius: .9rem; padding: .8rem 1.25rem; background: #d4af37; color: #111116; font-weight: 800; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div aria-hidden="true" style="font-size:3rem">♫</div>
+      <h1>أوركست غير متصل</h1>
+      <p>تحقق من اتصالك بالإنترنت ثم حاول من جديد. لا نعرض بيانات الكتالوج القديمة حتى لا تختلط عليك المعلومات.</p>
+      <button onclick="location.reload()">إعادة المحاولة</button>
+    </main>
+  </body>
+</html>

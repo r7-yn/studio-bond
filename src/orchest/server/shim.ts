@@ -4,6 +4,7 @@ type Handler = (req: ShimReq, res: ShimRes) => unknown;
 export interface ShimReq {
   body: Record<string, unknown> | undefined;
   headers: { cookie?: string; [k: string]: string | undefined };
+  query: URLSearchParams;
   params: Record<string, string>;
   header: (name: string) => string | undefined;
   ip: string;
@@ -83,6 +84,7 @@ export async function dispatch(request: Request): Promise<Response> {
   const req: ShimReq = {
     body,
     headers,
+    query: url.searchParams,
     params: match.params,
     header: (n) => headers[n.toLowerCase()],
     ip,

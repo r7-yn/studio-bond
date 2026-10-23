@@ -54,6 +54,9 @@ import {
 import { ImageUploader } from "./ImageUploader";
 import { OffersAdminPanel } from "./OffersAdminPanel";
 import { GiftDeliveryPanel } from "./GiftDeliveryPanel";
+import { AdminAssistantPanel } from "./AdminAssistantPanel";
+import { YouTubeImportPanel } from "./YouTubeImportPanel";
+import { PwaNotificationsPanel } from "./PwaNotificationsPanel";
 import { uploadMediaFile } from "../services/mediaUpload";
 import { adminLoadAllOrders, type AdminOrdersQuery } from "../services/catalogDb";
 
@@ -131,7 +134,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "tracks" | "artists" | "categories" | "offers" | "gifts" | "orders" | "analytics" | "settings"
+    | "tracks"
+    | "artists"
+    | "categories"
+    | "offers"
+    | "gifts"
+    | "orders"
+    | "analytics"
+    | "assistant"
+    | "youtube"
+    | "settings"
   >("tracks");
   const [searchTerm, setSearchTerm] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
@@ -740,6 +752,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           التحليلات والمخططات
         </button>
         <button
+          onClick={() => setActiveTab("assistant")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "assistant"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          مساعد الإدارة
+        </button>
+        <button
+          onClick={() => setActiveTab("youtube")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "youtube"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          <Youtube className="w-4 h-4" />
+          YouTube
+        </button>
+        <button
           onClick={() => setActiveTab("settings")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             activeTab === "settings"
@@ -1080,6 +1114,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {activeTab === "gifts" && <GiftDeliveryPanel csrfToken={csrfToken} theme={theme} />}
 
+      {activeTab === "assistant" && <AdminAssistantPanel csrfToken={csrfToken} theme={theme} />}
+
+      {activeTab === "youtube" && <YouTubeImportPanel csrfToken={csrfToken} theme={theme} />}
+
       {/* Tab 2: WhatsApp Order Logs matching Screenshot 1 & 3 */}
       {activeTab === "orders" && (
         <div
@@ -1385,6 +1423,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Tab 4: Settings & System Backups matching user specification */}
       {activeTab === "settings" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="lg:col-span-2">
+            <PwaNotificationsPanel csrfToken={csrfToken} theme={theme} />
+          </div>
           {/* Card 1: بطاقة رقم الواتساب المعتمد للطلبات */}
           <div
             className={`p-6 sm:p-8 rounded-3xl border ${

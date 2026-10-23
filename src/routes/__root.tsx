@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { PwaRuntime } from "../pwa/PwaRuntime";
 
 function NotFoundComponent() {
   return (
@@ -80,11 +81,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "أوركست | Orchest Studio" },
       { name: "description", content: "زفات خليجية وشيلات ملكية مخصصة بالأسماء." },
+      { name: "theme-color", content: "#111116" },
+      { name: "color-scheme", content: "light dark" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "أوركست" },
       { property: "og:title", content: "أوركست | Orchest Studio" },
       { property: "og:description", content: "زفات خليجية وشيلات ملكية مخصصة بالأسماء." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-          ],
+      { name: "twitter:title", content: "أوركست | Orchest Studio" },
+      { name: "twitter:description", content: "زفات خليجية وشيلات ملكية مخصصة بالأسماء." },
+      { name: "robots", content: "index, follow, max-image-preview:large" },
+    ],
     links: [
       {
         rel: "stylesheet",
@@ -97,6 +105,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/site.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icon-192.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -126,6 +136,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <PwaRuntime />
     </QueryClientProvider>
   );
 }
