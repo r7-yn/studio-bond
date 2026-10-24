@@ -5,7 +5,7 @@
 **المستودع:** `r7-yn/studio-bond`
 
 > **تحديث تنفيذي بعد مزامنة Antigravity وإغلاق الجولة الحالية — 24 أكتوبر 2026**
-> تم التحقق من commit `3a4426d` محلياً، وإضافة أصول الشعار المرفق (`logo-studio-orchest.jpg`, `og-image.jpg`, وأيقونات PWA)، وتصحيح وثيقة المعمارية، وإضافة migration تصحيحية لقيود تكاملات المنصة. TypeScript والاختبارات والبناء ناجحة. المتبقي يعتمد على بيئة Supabase/Vercel الحية: تطبيق migrations، ضبط الأسرار والنطاق، إنشاء حساب المدير، واختبار Preview/Production.
+> تم التحقق من commit `3a4426d` محلياً، وإضافة أصول الشعار المرفق (`logo-studio-orchest.jpg`, `og-image.jpg`, وأيقونات PWA)، وتصحيح وثيقة المعمارية، وإضافة migration تصحيحية لقيود تكاملات المنصة. TypeScript والاختبارات والبناء ناجحة. تم تطبيق migrations المطلوبة على Supabase والتحقق من الجداول والقيود؛ المتبقي يعتمد على Vercel: ضبط الأسرار والنطاق، اختبار Preview/Production، وتفعيل حماية كلمات المرور المسربة.
 
 
 ---
@@ -92,7 +92,7 @@
 | الاختبارات | 24 اختباراً في 5 ملفات (unit tests فقط) | ⚠️ محدود |
 | ESLint | 1,078 مشكلة في 26 ملفاً (معظمها legacy / generated) | ❌ يمنع CI |
 | البناء | يبني بنجاح — Vite + Nitro | ✅ جيد |
-| Migrations | 11 ملفات مصدرية؛ التطبيق الفعلي على Supabase يحتاج تحققاً | ⚠️ حرج |
+| Migrations | طُبقت على Supabase؛ تم التحقق من الجداول والقيود الجديدة | ✅ |
 
 ### أحجام الملفات الإشكالية
 
@@ -116,9 +116,9 @@
 
 ---
 
-#### P0-2 — Migrations لم تُطبَّق على Supabase الحي
+#### P0-2 — ✅ محلول: Migrations وSchema الحي
 
-الجداول التالية مفقودة من قاعدة البيانات الحية:
+تم تطبيق migrations المطلوبة والتحقق من وجود الجداول التالية في قاعدة البيانات الحية:
 - `orchest_admin_users` → تسجيل دخول المدير لن يعمل
 - `gift_deliveries` → بطاقات التسليم لن تعمل
 - `push_subscriptions` → Web Push لن يعمل
@@ -138,7 +138,7 @@
 20261023195122_b5674562-....sql
 20261024000000_platform_integrations.sql
 ```
-**الحل:** مراجعة كل ملف SQL، أخذ backup، تطبيقها بالترتيب عبر Supabase Dashboard → SQL Editor.
+**النتيجة الحية:** جداول الإدارة والبطاقات والتكاملات موجودة، وظهرت migrations التطبيق في سجل Supabase. يبقى أخذ backup تشغيلي قبل أول استخدام إنتاجي مهم.
 
 ---
 
@@ -388,15 +388,9 @@ allowedHosts: ["8080-i1xjrflr13ln7zk7vxgh6-721a5837.us4.manus.computer"],
 
 ---
 
-### Blocker 🔴 2 — تطبيق Migrations على Supabase
+### Blocker 🔴 2 — ✅ مغلق: تطبيق Migrations على Supabase
 
-```bash
-# خطوات:
-1. أخذ backup من Supabase Dashboard → Database → Backups
-2. فتح SQL Editor في Supabase
-3. تطبيق كل migration بالترتيب الزمني
-4. التحقق من وجود الجداول بعد كل migration
-```
+تم تطبيق migrations المطلوبة والتحقق من الجداول والقيود عبر Supabase. يبقى فقط توثيق backup تشغيلي قبل استقبال بيانات العملاء.
 
 زمن التنفيذ: **30-60 دقيقة**
 
@@ -424,13 +418,9 @@ Enable "Leaked Password Protection"
 
 ---
 
-### Blocker 🔴 5 — إنشاء حساب Admin في Supabase
+### Blocker 🔴 5 — ✅ مغلق: إنشاء حساب Admin في Supabase
 
-```sql
--- في Supabase SQL Editor بعد تطبيق migrations:
-INSERT INTO public.orchest_admin_users (user_id)
-VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
-```
+تم التحقق من وجود حساب إداري في Auth ووجود صف واحد في `public.orchest_admin_users`. لا تضف حساباً آخر إلا بموافقة صاحب الاستوديو.
 
 زمن التنفيذ: **10 دقائق** (بعد إنشاء حساب Auth)
 
@@ -574,7 +564,7 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
 ```
 اليوم 1-2: تقني
   □ حذف allowedHosts من vite.config.ts
-  □ تطبيق migrations على Supabase (مع backup)
+  ☑ تطبيق migrations على Supabase والتحقق من الجداول والقيود
   □ التحقق من الجداول بعد كل migration
   □ إنشاء حساب Admin وإضافته لـ orchest_admin_users
 
@@ -644,7 +634,7 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
 
 ### الحكم النهائي
 
-> **🟡 Release Candidate — الكود متحقق، ويتوقف الإطلاق على إعداد البيئة الحية**
+> **🟡 Release Candidate — الكود وSupabase متحققان، ويتوقف الإطلاق على إعداد Vercel والأسرار والنطاق**
 >
 > المشروع من أفضل ما بُني لهذا النيش في المنطقة العربية تقنياً.
 > الكود متين، الفكرة صحيحة، والتنفيذ محترف ومراعٍ للتفاصيل.

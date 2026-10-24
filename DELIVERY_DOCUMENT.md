@@ -6,7 +6,7 @@
 **الفرع الرئيسي:** `main`
 
 > **تحديث التسليم — 24 أكتوبر 2026**
-> تم مزامنة commit `3a4426d` محلياً والتحقق من `npm ci` وTypeScript والاختبارات (24/24) وproduction build. تم اعتماد شعار العميل في أصول الموقع، وإضافة `og-image.jpg` وأيقونات PWA، وتحديث وثيقة المعمارية، وإضافة migration تصحيحية للقيود. لا تزال خطوات Supabase/Vercel الحية تحتاج أسراراً ونطاقاً وصلاحيات تطبيق.
+> تم مزامنة commit `3a4426d` محلياً والتحقق من `npm ci` وTypeScript والاختبارات (24/24) وproduction build. تم اعتماد شعار العميل في أصول الموقع، وإضافة `og-image.jpg` وأيقونات PWA، وتحديث وثيقة المعمارية، وإضافة migration تصحيحية للقيود. تم تطبيق migrations المطلوبة والتحقق من الجداول والقيود في Supabase؛ لا تزال Vercel تحتاج الأسرار والنطاق وصلاحية النشر.
 
 
 ---
@@ -23,7 +23,7 @@
 | الاختبارات | ✅ 24 اختباراً في 5 ملفات (unit) |
 | البناء | ✅ Vite + Nitro يبنيان بنجاح |
 | ESLint | ⚠️ 1,078 مشكلة في ملفات legacy/generated |
-| قاعدة البيانات (Supabase) | ⚠️ 5+ migrations لم تُطبَّق بعد |
+| قاعدة البيانات (Supabase) | ✅ الجداول والقيود المطلوبة مطبقة؛ backup تشغيلي مطلوب قبل الإنتاج |
 
 ---
 
@@ -156,7 +156,9 @@ studio-bond/
 | `push_subscriptions` | اشتراكات Web Push (**pending migration**) | خادمي |
 | `admin_youtube_connections` | ربط YouTube OAuth (**pending migration**) | خادمي |
 
-### Migrations المعلّقة (يجب تطبيقها بالترتيب)
+### Migrations المطبقة والتحقق منها
+
+تم تطبيق migrations المطلوبة على المشروع `ktkzinhogzhaecspkzlc` والتحقق من وجود جداول الإدارة والتكاملات والقيود. احتفظ بقائمة الملفات التالية كمصدر تاريخي وترتيب إعادة البناء.
 
 ```sql
 -- 1. إضافة العروض وإعدادات الثيم
@@ -518,10 +520,9 @@ VAPID_SUBJECT=mailto:admin@your-domain.com
 
 ```
 ☑ [منجز]  حذف allowedHosts sandbox من vite.config.ts
-☐ [حرج]  أخذ backup من Supabase
-☐ [حرج]  أخذ backup ثم تطبيق 11 migrations بالترتيب على Supabase
-☐ [حرج]  إنشاء حساب Admin في Supabase Auth
-☐ [حرج]  إضافة user_id للمدير في جدول orchest_admin_users
+☐ [حرج]  أخذ backup تشغيلي موثق قبل أول استخدام إنتاجي
+☑ [منجز]  يوجد حساب Admin مسجل في Supabase Auth وقائمة `orchest_admin_users`
+☑ [منجز]  user_id للمدير موجود في جدول `orchest_admin_users`
 ☐ [حرج]  تفعيل Leaked Password Protection في Supabase
 ☐ [حرج]  ضبط جميع متغيرات البيئة في Vercel
 ☑ [منجز]  ترجمة رسائل الخطأ (404, Error) للعربية
