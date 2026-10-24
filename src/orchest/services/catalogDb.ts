@@ -67,7 +67,7 @@ export async function loadCatalog(): Promise<Catalog> {
       rhythm: (RHYTHMS as string[]).includes(r.rhythm) ? (r.rhythm as RhythmType) : "بدون موسيقى",
       categoryId: r.category_id ?? "",
       categoryLabel: catName.get(r.category_id ?? "") ?? "",
-      coverUrl: r.cover_url || r.cover_image,
+      coverUrl: r.cover_url || r.cover_image || "/icon-512.png",
       isPublished: r.is_published !== false,
       isTrend: r.is_trend,
       isExclusive: r.is_exclusive,

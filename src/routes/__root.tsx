@@ -16,19 +16,19 @@ import { PwaRuntime } from "../pwa/PwaRuntime";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4" dir="rtl">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">الصفحة غير موجودة</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          الصفحة التي تبحث عنها غير موجودة أو تم نقلها.
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            العودة للرئيسية
           </Link>
         </div>
       </div>
@@ -44,13 +44,11 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4" dir="rtl">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">تعذّر تحميل الصفحة</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          حدث خطأ غير متوقع. يمكنك المحاولة مجدداً أو العودة للرئيسية.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -60,19 +58,21 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            إعادة المحاولة
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            العودة للرئيسية
           </a>
         </div>
       </div>
     </div>
   );
 }
+
+const rootPublicUrl = import.meta.env["VITE_PUBLIC_SITE_URL"]?.replace(/\/$/, "");
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -88,9 +88,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "أوركست | Orchest Studio" },
       { property: "og:description", content: "زفات خليجية وشيلات ملكية مخصصة بالأسماء." },
       { property: "og:type", content: "website" },
+      ...(rootPublicUrl ? [{ property: "og:url", content: rootPublicUrl }] : []),
+      ...(rootPublicUrl
+        ? [{ property: "og:image", content: `${rootPublicUrl}/og-image.jpg` }]
+        : []),
+      ...(rootPublicUrl ? [{ property: "og:image:width", content: "1200" }] : []),
+      ...(rootPublicUrl ? [{ property: "og:image:height", content: "630" }] : []),
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "أوركست | Orchest Studio" },
       { name: "twitter:description", content: "زفات خليجية وشيلات ملكية مخصصة بالأسماء." },
+      ...(rootPublicUrl
+        ? [{ name: "twitter:image", content: `${rootPublicUrl}/og-image.jpg` }]
+        : []),
       { name: "robots", content: "index, follow, max-image-preview:large" },
     ],
     links: [
