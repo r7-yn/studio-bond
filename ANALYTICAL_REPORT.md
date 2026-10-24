@@ -396,7 +396,7 @@ allowedHosts: ["8080-i1xjrflr13ln7zk7vxgh6-721a5837.us4.manus.computer"],
 
 ---
 
-### Blocker 🔴 3 — ضبط متغيرات البيئة في Vercel
+### Blocker 🔴 3 — ضبط متغيرات البيئة وربط المستودع الصحيح في Vercel
 
 ```bash
 # Vercel Dashboard → Project → Settings → Environment Variables

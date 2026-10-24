@@ -524,7 +524,7 @@ VAPID_SUBJECT=mailto:admin@your-domain.com
 ☑ [منجز]  يوجد حساب Admin مسجل في Supabase Auth وقائمة `orchest_admin_users`
 ☑ [منجز]  user_id للمدير موجود في جدول `orchest_admin_users`
 ☐ [حرج]  تفعيل Leaked Password Protection في Supabase
-☐ [حرج]  ضبط جميع متغيرات البيئة في Vercel
+☐ [حرج]  ربط مشروع Vercel بمستودع `r7-yn/studio-bond` أو تأكيد أن المستودع الخاص هو المصدر الصحيح، ثم ضبط متغيرات البيئة
 ☑ [منجز]  ترجمة رسائل الخطأ (404, Error) للعربية
 ☑ [منجز]  إنشاء وإضافة og:image (1200×630px) من شعار الاستوديو المعتمد
 ☐ [مهم]  اختبار Preview deployment على Android + iOS
