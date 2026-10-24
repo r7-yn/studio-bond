@@ -1,6 +1,6 @@
-import React from 'react';
-import { ChevronLeft } from 'lucide-react';
-import { Category, CategoryId, ThemeMode } from '../types/index';
+import React from "react";
+import { ChevronLeft } from "lucide-react";
+import { Category, CategoryId, ThemeMode } from "../types/index";
 
 interface CategoryGridProps {
   categories: Category[];
@@ -17,7 +17,7 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
   theme,
   onViewAll,
 }) => {
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -27,7 +27,7 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
             <span>أقسامنا</span>
           </h2>
-          <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+          <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-[#9CA3AF]" : "text-[#6B7280]"}`}>
             تصفح الأعمال المصنفة بدقة حسب المناسبة والذوق الصوتي
           </p>
         </div>
@@ -35,7 +35,7 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
         <button
           onClick={onViewAll}
           className={`flex items-center gap-1 text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-            isDark ? 'text-[#D4AF37] hover:underline' : 'text-[#B89728] hover:underline'
+            isDark ? "text-[#D4AF37] hover:underline" : "text-[#B89728] hover:underline"
           }`}
         >
           <span>عرض الكل</span>
@@ -53,10 +53,10 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
               onClick={() => onSelectCategory(cat.id)}
               className={`group relative overflow-hidden rounded-2xl cursor-pointer border transition-all duration-300 ${
                 isSelected
-                  ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 scale-[1.02]'
+                  ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/30 scale-[1.02]"
                   : isDark
-                  ? 'bg-[#16161C] border-white/10 hover:border-[#D4AF37]/50 hover:shadow-lg hover:shadow-black/40'
-                  : 'bg-white border-black/10 hover:border-[#B89728]/50 hover:shadow-md'
+                    ? "bg-[#16161C] border-white/10 hover:border-[#D4AF37]/50 hover:shadow-lg hover:shadow-black/40"
+                    : "bg-white border-black/10 hover:border-[#B89728]/50 hover:shadow-md"
               }`}
             >
               {/* Image thumbnail with overlay */}
@@ -70,8 +70,8 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
                 <div
                   className={`absolute inset-0 bg-gradient-to-t ${
                     isDark
-                      ? 'from-[#16161C] via-[#16161C]/50 to-transparent'
-                      : 'from-[#FFFFFF] via-[#FFFFFF]/50 to-transparent'
+                      ? "from-[#16161C] via-[#16161C]/50 to-transparent"
+                      : "from-[#FFFFFF] via-[#FFFFFF]/50 to-transparent"
                   }`}
                 />
               </div>
@@ -81,9 +81,21 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
                 <h3 className="font-bold text-sm sm:text-base group-hover:text-[#D4AF37] transition-colors">
                   {cat.name}
                 </h3>
-                <span className={`text-xs block mt-1 ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+                <span
+                  className={`text-xs block mt-1 ${isDark ? "text-[#9CA3AF]" : "text-[#6B7280]"}`}
+                >
                   {cat.count.toLocaleString()} عمل
                 </span>
+                {cat.slug && (
+                  <a
+                    href={`/category/${encodeURIComponent(cat.slug)}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-2 inline-block text-xs font-semibold text-o-primary hover:underline"
+                    aria-label={`عرض صفحة تصنيف ${cat.name}`}
+                  >
+                    استكشف التصنيف
+                  </a>
+                )}
               </div>
             </div>
           );

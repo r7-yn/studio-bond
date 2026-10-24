@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
+import { Route as CategorySlugRouteImport } from './routes/category/$slug'
 import { Route as GiftTokenRouteImport } from './routes/gift/$token'
+import { Route as TracksCodeRouteImport } from './routes/tracks/$code'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,40 +25,65 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
   path: '/api/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CategorySlugRoute = CategorySlugRouteImport.update({
+  id: '/category/$slug',
+  path: '/category/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GiftTokenRoute = GiftTokenRouteImport.update({
   id: '/gift/$token',
   path: '/gift/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TracksCodeRoute = TracksCodeRouteImport.update({
+  id: '/tracks/$code',
+  path: '/tracks/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/$': typeof ApiSplatRoute
+  '/category/$slug': typeof CategorySlugRoute
   '/gift/$token': typeof GiftTokenRoute
+  '/tracks/$code': typeof TracksCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/$': typeof ApiSplatRoute
+  '/category/$slug': typeof CategorySlugRoute
   '/gift/$token': typeof GiftTokenRoute
+  '/tracks/$code': typeof TracksCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/$': typeof ApiSplatRoute
+  '/category/$slug': typeof CategorySlugRoute
   '/gift/$token': typeof GiftTokenRoute
+  '/tracks/$code': typeof TracksCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/$' | '/gift/$token'
+  fullPaths:
+    '/' | '/api/$' | '/category/$slug' | '/gift/$token' | '/tracks/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/$' | '/gift/$token'
-  id: '__root__' | '/' | '/api/$' | '/gift/$token'
+  to: '/' | '/api/$' | '/category/$slug' | '/gift/$token' | '/tracks/$code'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/$'
+    | '/category/$slug'
+    | '/gift/$token'
+    | '/tracks/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiSplatRoute: typeof ApiSplatRoute
+  CategorySlugRoute: typeof CategorySlugRoute
   GiftTokenRoute: typeof GiftTokenRoute
+  TracksCodeRoute: typeof TracksCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,11 +102,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/category/$slug': {
+      id: '/category/$slug'
+      path: '/category/$slug'
+      fullPath: '/category/$slug'
+      preLoaderRoute: typeof CategorySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gift/$token': {
       id: '/gift/$token'
       path: '/gift/$token'
       fullPath: '/gift/$token'
       preLoaderRoute: typeof GiftTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tracks/$code': {
+      id: '/tracks/$code'
+      path: '/tracks/$code'
+      fullPath: '/tracks/$code'
+      preLoaderRoute: typeof TracksCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -88,7 +129,9 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiSplatRoute: ApiSplatRoute,
+  CategorySlugRoute: CategorySlugRoute,
   GiftTokenRoute: GiftTokenRoute,
+  TracksCodeRoute: TracksCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

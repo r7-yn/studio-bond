@@ -13,6 +13,7 @@ import {
 import { Track, ThemeMode, OrderRequest } from "../types/index";
 import { generateWhatsAppMessage, generateWhatsAppUrl } from "../utils/trackLogic";
 import { validateOrderStep, ORDER_STEPS, type OrderStep } from "../utils/orderSteps";
+import { trackGa4Event } from "../services/ga4";
 
 interface OrderModalProps {
   track: Track;
@@ -274,6 +275,12 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                   href={generateWhatsAppUrl(whatsappNumber, confirmationMessage)}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() =>
+                    trackGa4Event("whatsapp_click", {
+                      track_id: track.id,
+                      track_code: track.code,
+                    })
+                  }
                   className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-o-border px-5 text-sm font-semibold hover:bg-o-surface-hover"
                 >
                   <MessageCircle className="h-4 w-4" /> فتح واتساب

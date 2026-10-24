@@ -14,6 +14,8 @@ import {
   OfferPackage,
 } from "./types/index";
 import { audioEngine } from "./services/audioEngine";
+import { trackGa4Event } from "./services/ga4";
+import { loadPublicTrackPage } from "./services/seoCatalog";
 import {
   loadCatalog,
   saveOrder,
@@ -32,9 +34,11 @@ import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { CategoryGrid } from "./components/CategoryGrid";
 import { TrackCard } from "./components/TrackCard";
+import { TrackComparisonPanel } from "./components/TrackComparisonPanel";
 import { TrackDetailsView } from "./components/TrackDetailsView";
 import { StickyAudioPlayer } from "./components/StickyAudioPlayer";
 import { OrderModal } from "./components/OrderModal";
+import { AnalyticsConsentBanner } from "./components/AnalyticsConsentBanner";
 const AdminDashboard = lazy(() =>
   import("./components/AdminDashboard").then((module) => ({
     default: module.AdminDashboard,
@@ -339,6 +343,7 @@ export default function App() {
       return [];
     }
   });
+  const [comparisonTracks, setComparisonTracks] = useState<Track[]>([]);
 
   // Audio state synced from AudioEngine
   const [audioState, setAudioState] = useState(audioEngine.getState());
@@ -346,8 +351,33 @@ export default function App() {
   // Modals state
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderModalTrack, setOrderModalTrack] = useState<Track | null>(null);
+  const orderDeepLinkHandled = useRef(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isAiConciergeOpen, setIsAiConciergeOpen] = useState(false);
+
+  useEffect(() => {
+    if (orderDeepLinkHandled.current) return;
+    const code = new URLSearchParams(window.location.search).get("order");
+    if (!code) {
+      orderDeepLinkHandled.current = true;
+      return;
+    }
+    orderDeepLinkHandled.current = true;
+    void loadPublicTrackPage({ data: { code } })
+      .then((track) => {
+        if (!track) {
+          toast.error("العمل المطلوب غير متاح حالياً");
+          return;
+        }
+        setCurrentView("home");
+        setSelectedTrack(track);
+        setOrderModalTrack(track);
+        setIsOrderModalOpen(true);
+        trackGa4Event("order_modal_open", { track_id: track.id, track_code: track.code });
+        window.history.replaceState({}, "", window.location.pathname);
+      })
+      .catch(() => toast.error("تعذر فتح نموذج الطلب حالياً"));
+  }, []);
 
   const loadAdminSession = async () => {
     try {
@@ -446,14 +476,42 @@ export default function App() {
     );
   };
 
+  const toggleCompareTrack = (track: Track) => {
+    if (comparisonTracks.some((item) => item.id === track.id)) {
+      setComparisonTracks((current) => current.filter((item) => item.id !== track.id));
+      return;
+    }
+    if (comparisonTracks.length >= 2) {
+      toast.error("يمكن مقارنة عملين فقط في كل مرة");
+      return;
+    }
+    setComparisonTracks((current) => [...current, track]);
+  };
+
   // Playback handlers
   const handleTogglePlay = (track: Track) => {
     if (audioState.isPlaying && audioState.trackId === track.id) {
       audioEngine.pause();
     } else {
+      trackGa4Event("track_play", {
+        track_id: track.id,
+        track_code: track.code,
+        track_title: track.title,
+      });
       setSelectedTrack(track);
       audioEngine.play(track);
     }
+  };
+
+  const startComparisonTrack = (track: Track) => {
+    setSelectedTrack(track);
+    trackGa4Event("track_play", {
+      track_id: track.id,
+      track_code: track.code,
+      track_title: track.title,
+      playback_context: "comparison",
+    });
+    audioEngine.play(track);
   };
 
   const handleNextTrack = () => {
@@ -477,6 +535,7 @@ export default function App() {
 
   // Order Handlers
   const openOrderModalForTrack = (track: Track) => {
+    trackGa4Event("order_modal_open", { track_id: track.id, track_code: track.code });
     setOrderModalTrack(track);
     setIsOrderModalOpen(true);
   };
@@ -654,6 +713,8 @@ export default function App() {
                   <TrackCard
                     key={track.id}
                     track={track}
+                    isCompared={comparisonTracks.some((item) => item.id === track.id)}
+                    onToggleCompare={toggleCompareTrack}
                     isPlaying={audioState.isPlaying && audioState.trackId === track.id}
                     onTogglePlay={(e) => {
                       e.stopPropagation();
@@ -854,6 +915,8 @@ export default function App() {
                   <TrackCard
                     key={track.id}
                     track={track}
+                    isCompared={comparisonTracks.some((item) => item.id === track.id)}
+                    onToggleCompare={toggleCompareTrack}
                     isPlaying={audioState.isPlaying && audioState.trackId === track.id}
                     onTogglePlay={(e) => {
                       e.stopPropagation();
@@ -963,6 +1026,8 @@ export default function App() {
                   <TrackCard
                     key={track.id}
                     track={track}
+                    isCompared={comparisonTracks.some((item) => item.id === track.id)}
+                    onToggleCompare={toggleCompareTrack}
                     isPlaying={audioState.isPlaying && audioState.trackId === track.id}
                     onTogglePlay={(e) => {
                       e.stopPropagation();
@@ -1114,6 +1179,15 @@ export default function App() {
         />
       )}
 
+      <TrackComparisonPanel
+        tracks={comparisonTracks}
+        onRemove={(trackId) =>
+          setComparisonTracks((current) => current.filter((track) => track.id !== trackId))
+        }
+        onStartTrack={startComparisonTrack}
+        onPause={() => audioEngine.pause()}
+      />
+
       {/* 3. Mobile Bottom Navigation Bar */}
       <MobileBottomNav
         currentView={currentView}
@@ -1183,6 +1257,7 @@ export default function App() {
         isPlaying={audioState.isPlaying}
         theme={theme}
       />
+      <AnalyticsConsentBanner />
     </div>
   );
 }

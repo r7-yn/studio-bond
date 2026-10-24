@@ -1442,6 +1442,17 @@ ${JSON.stringify(catalogData, null, 2)}`;
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
                 },
+                recommendations: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      trackId: { type: Type.STRING },
+                      reason: { type: Type.STRING },
+                    },
+                    required: ["trackId", "reason"],
+                  },
+                },
                 suggestedModification: { type: Type.STRING },
               },
               required: ["reply", "recommendedTrackIds"],
@@ -1455,7 +1466,39 @@ ${JSON.stringify(catalogData, null, 2)}`;
           Array.isArray(parsed.recommendedTrackIds) &&
           parsed.recommendedTrackIds.length > 0
         ) {
-          return res.json(parsed);
+          const allowedTracks = new Set(catalogList.map((track) => track.id));
+          const recommendedTrackIds = [...new Set(parsed.recommendedTrackIds)]
+            .filter((id: unknown): id is string => typeof id === "string" && allowedTracks.has(id))
+            .slice(0, 3);
+          if (recommendedTrackIds.length > 0) {
+            const reasons = new Map<string, string>();
+            if (Array.isArray(parsed.recommendations)) {
+              for (const recommendation of parsed.recommendations) {
+                if (
+                  recommendation &&
+                  typeof recommendation.trackId === "string" &&
+                  typeof recommendation.reason === "string" &&
+                  allowedTracks.has(recommendation.trackId)
+                ) {
+                  reasons.set(recommendation.trackId, recommendation.reason.slice(0, 240));
+                }
+              }
+            }
+            return res.json({
+              reply: String(parsed.reply).slice(0, 1200),
+              recommendedTrackIds,
+              recommendations: recommendedTrackIds.map((trackId) => ({
+                trackId,
+                reason:
+                  reasons.get(trackId) ||
+                  "اخترناه لتقارب وصفه وإيقاعه مع تفاصيل مناسبتك في الكتالوج.",
+              })),
+              suggestedModification:
+                typeof parsed.suggestedModification === "string"
+                  ? parsed.suggestedModification.slice(0, 240)
+                  : undefined,
+            });
+          }
         }
       } catch (geminiErr: unknown) {
         console.warn(
@@ -1471,7 +1514,11 @@ ${JSON.stringify(catalogData, null, 2)}`;
 
     return res.json({
       reply: `يا أهلاً وسهلاً بك في استوديو أوركست! 🎵 ألف مبروك مقدماً. بناءً على رغبتك (${semanticMatches.detectedIntent})، قمت باختيار هذه الأعمال الصوتية الملكية التي تتطابق تماماً مع إحساس المسيرة وجودة الاستوديو التي تبحث عنها:`,
-      recommendedTrackIds: topIds.length > 0 ? topIds : catalogList.slice(0, 3).map((t) => t.id),
+      recommendedTrackIds: topIds,
+      recommendations: semanticMatches.matches.slice(0, 3).map((match) => ({
+        trackId: match.trackId,
+        reason: match.reason.slice(0, 240),
+      })),
       suggestedModification: "تغيير أسماء العروسين مع إمكانية إضافة مقدمة شعرية خاصة بالأسماء",
     });
   } catch (error: unknown) {

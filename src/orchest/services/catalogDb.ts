@@ -47,6 +47,7 @@ export async function loadCatalog(): Promise<Catalog> {
     .map((r) => ({
       id: r.id,
       name: r.name,
+      slug: r.slug,
       count: r.track_count ?? 0,
       image: r.image_url ?? "",
       description: r.description,

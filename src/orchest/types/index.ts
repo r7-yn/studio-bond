@@ -30,6 +30,7 @@ export interface Track {
 export interface Category {
   id: CategoryId;
   name: string;
+  slug?: string;
   count: number;
   image: string;
   description: string;
