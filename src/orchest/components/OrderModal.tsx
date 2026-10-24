@@ -4,6 +4,7 @@ import {
   MessageCircle,
   Sparkles,
   CheckCircle2,
+  Copy,
   ArrowRight,
   ArrowLeft,
   Music,
@@ -49,6 +50,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
   const [notes, setNotes] = useState("");
   const [phone, setPhone] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
@@ -61,6 +64,9 @@ export const OrderModal: React.FC<OrderModalProps> = ({
     setRequestId(crypto.randomUUID());
     setHoneypot("");
     setIsSubmitting(false);
+    setShowSuccess(false);
+    setConfirmationMessage("");
+    setCopied(false);
     setError(null);
   }, [isOpen]);
 
@@ -99,8 +105,6 @@ export const OrderModal: React.FC<OrderModalProps> = ({
     if (!whatsappUrl)
       return setError("رقم واتساب الاستوديو غير صالح حالياً. يرجى المحاولة لاحقاً.");
 
-    // Open during the click gesture; delayed window.open calls are often blocked.
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
     setIsSubmitting(true);
     setError(null);
     try {
@@ -120,20 +124,32 @@ export const OrderModal: React.FC<OrderModalProps> = ({
         },
         { formStartedAt, website: honeypot },
       );
+      setConfirmationMessage(message);
       setShowSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setShowSuccess(false);
-        setStep(0);
-        setFormStartedAt(Date.now());
-        setRequestId(crypto.randomUUID());
-        setIsSubmitting(false);
-      }, 1200);
+      setCopied(false);
     } catch (submitError) {
       console.error("Order submission failed", submitError);
-      setError("تعذر حفظ الطلب حالياً. بقيت محادثة واتساب مفتوحة، ويمكنك المحاولة مجدداً.");
+      setError("تعذر حفظ الطلب حالياً. يرجى المحاولة مجدداً.");
       setIsSubmitting(false);
     }
+  };
+  const handleCopyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(confirmationMessage);
+      setCopied(true);
+    } catch {
+      setError("تعذر النسخ تلقائياً. حدد الرسالة وانسخها يدوياً.");
+    }
+  };
+  const closeSuccess = () => {
+    setShowSuccess(false);
+    setConfirmationMessage("");
+    setCopied(false);
+    setStep(0);
+    setFormStartedAt(Date.now());
+    setRequestId(crypto.randomUUID());
+    setIsSubmitting(false);
+    onClose();
   };
 
   const progress = ((step + 1) / ORDER_STEPS.length) * 100;
@@ -220,14 +236,57 @@ export const OrderModal: React.FC<OrderModalProps> = ({
         </div>
 
         {showSuccess ? (
-          <div className="text-center px-6 py-12">
+          <div className="px-6 pb-7 sm:px-10">
             <div className="w-16 h-16 rounded-full bg-o-whatsapp/15 text-o-whatsapp mx-auto flex items-center justify-center mb-4">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h4 className="text-xl font-semibold mb-2">تم تجهيز طلبك</h4>
-            <p className="text-sm text-o-muted">
-              ننقلك الآن إلى محادثة واتساب الاستوديو لتأكيد التفاصيل
-            </p>
+            <div className="text-center">
+              <h4 className="text-xl font-semibold mb-2">تم تسجيل طلبك</h4>
+              <p className="text-sm text-o-muted mb-5">
+                أرسل الرسالة الجاهزة إلى الاستوديو عبر واتساب لتأكيد التفاصيل.
+              </p>
+            </div>
+            <div className="mx-auto max-w-xl space-y-3">
+              <div className="rounded-xl border border-o-border bg-o-bg p-4">
+                <p className="mb-1 text-xs text-o-muted">رقم واتساب الاستوديو</p>
+                <p dir="ltr" className="text-left font-semibold">
+                  {whatsappNumber || "غير متاح حالياً"}
+                </p>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs text-o-muted">رسالة جاهزة للنسخ</span>
+                <textarea
+                  readOnly
+                  rows={6}
+                  value={confirmationMessage}
+                  className="w-full rounded-xl border border-o-border bg-o-bg p-3 text-sm leading-6"
+                />
+              </label>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCopyMessage}
+                  className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-o-primary px-5 text-sm font-semibold text-o-on-primary hover:bg-o-primary-hover"
+                >
+                  <Copy className="h-4 w-4" /> {copied ? "تم نسخ الرسالة" : "نسخ الرسالة"}
+                </button>
+                <a
+                  href={generateWhatsAppUrl(whatsappNumber, confirmationMessage)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-o-border px-5 text-sm font-semibold hover:bg-o-surface-hover"
+                >
+                  <MessageCircle className="h-4 w-4" /> فتح واتساب
+                </a>
+                <button
+                  type="button"
+                  onClick={closeSuccess}
+                  className="inline-flex h-11 items-center rounded-[10px] px-5 text-sm font-medium text-o-muted hover:text-o-text"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="grid gap-6 px-6 pb-6 sm:grid-cols-[1fr_15rem]">
@@ -350,7 +409,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                     ))}
                   </dl>
                   <p className="text-xs text-o-muted">
-                    سيُفتح واتساب برسالة جاهزة لتأكيد الطلب مع فريق الاستوديو.
+                    بعد تسجيل الطلب ستظهر لك نافذة برقم واتساب ورسالة جاهزة للنسخ، ويمكنك فتح
+                    المحادثة يدوياً.
                   </p>
                 </div>
               )}
