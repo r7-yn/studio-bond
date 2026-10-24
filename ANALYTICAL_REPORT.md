@@ -4,6 +4,10 @@
 **المُعِدّ:** مراجعة تقنية متكاملة (Architecture · Code · Security · SEO · UX · Vercel)
 **المستودع:** `r7-yn/studio-bond`
 
+> **تحديث تنفيذي بعد مزامنة Antigravity وإغلاق الجولة الحالية — 24 أكتوبر 2026**
+> تم التحقق من commit `3a4426d` محلياً، وإضافة أصول الشعار المرفق (`logo-studio-orchest.jpg`, `og-image.jpg`, وأيقونات PWA)، وتصحيح وثيقة المعمارية، وإضافة migration تصحيحية لقيود تكاملات المنصة. TypeScript والاختبارات والبناء ناجحة. المتبقي يعتمد على بيئة Supabase/Vercel الحية: تطبيق migrations، ضبط الأسرار والنطاق، إنشاء حساب المدير، واختبار Preview/Production.
+
+
 ---
 
 ## 📋 فهرس المحتويات
@@ -88,7 +92,7 @@
 | الاختبارات | 24 اختباراً في 5 ملفات (unit tests فقط) | ⚠️ محدود |
 | ESLint | 1,078 مشكلة في 26 ملفاً (معظمها legacy / generated) | ❌ يمنع CI |
 | البناء | يبني بنجاح — Vite + Nitro | ✅ جيد |
-| Migrations | 10 ملفات — 5+ لم تُطبَّق على Supabase الحي | ⚠️ حرج |
+| Migrations | 11 ملفات مصدرية؛ التطبيق الفعلي على Supabase يحتاج تحققاً | ⚠️ حرج |
 
 ### أحجام الملفات الإشكالية
 
@@ -106,15 +110,9 @@
 
 ### 🔴 مشاكل حرجة — P0 (تمنع النشر كلياً)
 
-#### P0-1 — عنوان Sandbox محدّد في vite.config.ts
+#### P0-1 — ✅ محلول: عنوان Sandbox في vite.config.ts
 
-```typescript
-// vite.config.ts — السطر 12
-allowedHosts: ["8080-i1xjrflr13ln7zk7vxgh6-721a5837.us4.manus.computer"],
-```
-
-**التأثير:** كل طلب من نطاق Vercel أو أي نطاق آخر سيُرفض بـ 403. الموقع لن يعمل إطلاقاً في الإنتاج.
-**الحل الفوري:** حذف سطر `allowedHosts` بالكامل (الإعداد الافتراضي آمن في الإنتاج).
+تم حذف `allowedHosts` الخاص ببيئة Manus في commit `3a4426d`. يجب إبقاء الإعداد الافتراضي وعدم إعادة عنوان Sandbox إلى الإنتاج.
 
 ---
 
@@ -156,15 +154,13 @@ LOVABLE_API_KEY=           # مطلوب لمساعد AI
 
 ---
 
-#### P0-4 — web-push غير متوافق مع Cloudflare Workers
+#### P0-4 — ✅ محلول: Web Push مع Vercel Node runtime
 
 ```json
 "web-push": "^3.6.7"
 ```
 
-حزمة `web-push` تعتمد على `node:crypto` APIs غير المتاحة في Cloudflare Workers.
-**التأثير:** إذا نُشر على Cloudflare، إشعارات Push ستتعطل كلياً وقت التشغيل.
-**الحل:** اختر Vercel (Node.js runtime) أو استبدل `web-push` بمكتبة تعمل مع Web Crypto API.
+تم تثبيت `nitro: { preset: "vercel" }` في `vite.config.ts` حتى يعمل `web-push` على Vercel Node.js. لا ينبغي نشر هذه النسخة على Cloudflare Workers دون استبدال مكتبة Web Push.
 
 ---
 
@@ -210,17 +206,9 @@ const shareUrl = `${window.location.origin}/tracks/${track.code.replace('#', '')
 **الحل (سريع):** تغيير الرابط ليشير للصفحة الرئيسية + query param: `/?track=ORC-204`
 **الحل (المثالي):** بناء صفحات `/tracks/[code]` ثابتة (راجع القسم 9).
 
-#### P1-4 — صفحات الخطأ بالإنجليزية في منصة عربية
+#### P1-4 — ✅ محلول: صفحات الخطأ أصبحت عربية
 
-```typescript
-// __root.tsx
-<h2>Page not found</h2>
-<p>The page you're looking for doesn't exist or has been moved.</p>
-<button>Try again</button>
-<a>Go home</a>
-```
-
-**الحل:** ترجمة كاملة للعربية مع دعم RTL.
+تم تعريب 404 وصفحة الخطأ وإضافة `dir="rtl"` في `src/routes/__root.tsx`.
 
 #### P1-5 — Rate Limit Map تنمو بلا حد في الذاكرة
 
@@ -247,20 +235,13 @@ const requestWindows = new Map<string, { count: number; resetAt: number }>();
 - فتح نافذة الطلب وإكمالها → التحقق من رابط واتساب
 - تسجيل دخول المدير → التحقق من صلاحية الوصول
 
-#### P2-3 — لا توجد og:image
+#### P2-3 — ✅ محلول: og:image
 
-لا تظهر صورة المعاينة عند مشاركة الرابط على واتساب وتويتر.
-**الحل:** إضافة صورة ثابتة 1200×630px لـ OG وإضافتها في `__root.tsx`.
+تم إنشاء `public/og-image.jpg` بمقاس 1200×630 من شعار الاستوديو المرفق وربطه في metadata.
 
-#### P2-4 — Fallback مفقود لصور الأعمال
+#### P2-4 — ✅ محلول: fallback لصور الأعمال
 
-```typescript
-// catalogDb.ts — السطر 70
-coverUrl: r.cover_url || r.cover_image,
-```
-
-إذا كانا فارغين، تظهر صورة مكسورة في TrackCard.
-**الحل:** إضافة `/icon-512.png` أو placeholder مصمم خصيصاً كـ fallback نهائي.
+تم استخدام `/icon-512.png` كـfallback نهائي عند غياب صور الغلاف.
 
 #### P2-5 — حقل audioFreq موثّق لكن غير مُطبَّق
 
@@ -379,20 +360,16 @@ VAPID_SUBJECT=mailto:admin@orchest.studio
 
 **3. التحقق من Nitro Preset**
 
-يجب التأكد أن Nitro يُضبط على `vercel` preset وليس `cloudflare`:
-```typescript
-// app.config.ts أو vite.config.ts
-// التحقق من preset الحالي والتعديل لـ Vercel
-```
+تم تثبيت Nitro صراحة على `vercel` preset في `vite.config.ts`، وتم التحقق من أن build الإنتاج ينجح على هذه الإعدادات.
 
 ### نقاط صراع محتملة مع Vercel
 
 | المشكلة | التأثير | الحل |
 |---|---|---|
 | `allowedHosts` sandbox في vite.config | 403 على كل Vercel domains | حذف السطر |
-| `web-push` على Edge Runtime | Crash في runtime | فرض Node.js Runtime |
+| `web-push` على Edge Runtime | Crash في runtime | ✅ تم فرض Vercel Node.js في vite.config.ts |
 | In-memory rate limit | غير فعال مع multiple instances | Upstash Redis |
-| Nitro preset = cloudflare | build output خاطئ | تغيير لـ vercel preset |
+| Nitro preset = cloudflare | build output خاطئ | ✅ مغلق: `nitro: { preset: "vercel" }` |
 
 ---
 
@@ -400,7 +377,7 @@ VAPID_SUBJECT=mailto:admin@orchest.studio
 
 بالترتيب الإلزامي:
 
-### Blocker 🔴 1 — حذف allowedHosts من vite.config.ts
+### Blocker 🔴 1 — ✅ مغلق: حذف allowedHosts من vite.config.ts
 
 ```typescript
 // احذف هذا السطر:
@@ -459,7 +436,7 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
 
 ---
 
-### Blocker 🟠 6 — ترجمة صفحات الخطأ للعربية
+### Blocker 🟠 6 — ✅ مغلق: ترجمة صفحات الخطأ للعربية
 
 ```typescript
 // src/routes/__root.tsx — تعديل NotFoundComponent وErrorComponent
@@ -469,7 +446,7 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
 
 ---
 
-### Blocker 🟠 7 — إضافة og:image
+### Blocker 🟠 7 — ✅ مغلق: إضافة og:image
 
 ```typescript
 // src/routes/__root.tsx — إضافة في head():
@@ -605,12 +582,12 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
   □ تفعيل Leaked Password Protection في Supabase
   □ ضبط متغيرات البيئة في Vercel Dashboard
   □ إنشاء vercel.json بالإعدادات الصحيحة
-  □ تأكيد Nitro preset = vercel
+  ☑ تأكيد Nitro preset = vercel
 
 اليوم 3-4: محتوى وجودة
-  □ ترجمة صفحات الخطأ للعربية
-  □ تصميم وإضافة og:image (1200×630px)
-  □ إضافة cover fallback للأعمال بدون صورة
+  ☑ ترجمة صفحات الخطأ للعربية
+  ☑ تصميم وإضافة og:image (1200×630px) من شعار العميل
+  ☑ إضافة cover fallback للأعمال بدون صورة
 
 اليوم 5-6: اختبار
   □ نشر على Vercel Preview
@@ -667,7 +644,7 @@ VALUES ('UUID_OF_APPROVED_SUPABASE_AUTH_USER');
 
 ### الحكم النهائي
 
-> **🟡 Release Candidate — جاهز برمجياً، يتوقف على إعداد البيئة**
+> **🟡 Release Candidate — الكود متحقق، ويتوقف الإطلاق على إعداد البيئة الحية**
 >
 > المشروع من أفضل ما بُني لهذا النيش في المنطقة العربية تقنياً.
 > الكود متين، الفكرة صحيحة، والتنفيذ محترف ومراعٍ للتفاصيل.

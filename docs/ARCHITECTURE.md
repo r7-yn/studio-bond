@@ -18,76 +18,57 @@ One level above the code. Boxes and arrows, not modules.
 Client (Mobile / Desktop Browser)
 |
 v
-Frontend (Next.js App Router + Audio Context) -----> Auth Provider (Admin Only)
+Frontend (TanStack Start + React + Audio Engine) -----> Auth Provider (Admin Only)
 |
 v
-Backend API (Route Handlers / Server Actions)
+Backend API (Nitro + Express-compatible shim)
 |
-+---> Database (Supabase PostgreSQL / Drizzle ORM)
-+---> Cloud Storage (Cloudflare R2 / S3-compatible for Audio/Thumbnails)
-+---> AI Engine (Google GenAI / Gemini 1.5 Flash via Server-Side SDK)
++---> Database (Supabase PostgreSQL + Supabase JS)
++---> Cloud Storage (Supabase Storage for Audio/Thumbnails)
++---> AI Engine (Lovable AI Gateway via server-side shim)
 +---> WhatsApp Outbound (Direct wa.me protocol dispatch via client)
 
 ```
 
 - Users interact with the frontend as guest listeners without requiring accounts.
-- The frontend never talks to PostgreSQL or Cloudflare R2 credentials directly; all writes and administrative mutations flow through the Next.js API layer.
-- Third-party AI and cloud storage API keys live strictly in server environment variables (`GEMINI_API_KEY`, `R2_SECRET_KEY`) and are never bundled to the client.
+- The frontend uses only the browser-safe Supabase key for public reads; all writes and administrative mutations flow through the Nitro API layer and service-role client.
+- Third-party AI, Supabase service-role, YouTube OAuth, and Web Push secrets live strictly in server environment variables and are never bundled to the client.
 
 ## 02 Tech stack
-
 | Layer | Choice | Why this, not the obvious alternative |
 | --- | --- | --- |
-| Frontend | Next.js (App Router, TypeScript) | SSR/SSG ensures fast indexing and schema markup for Google SEO on tracks; React Context manages persistent audio without route teardown. |
-| Styling | Tailwind CSS + CSS Tokens | Strict adherence to `DESIGN_SYSTEM.md` tokens; instant `[data-theme]` switching between Dark Luxury and Light mode with zero runtime penalty. |
-| Audio Engine | Web Audio API / WaveSurfer.js + Facade Embeds | Renders real-time waveforms for uploaded audio files and handles YouTube embeds without killing the persistent sticky audio session. |
-| Backend | Next.js Route Handlers (`src/app/api/`) | Eliminates the need for a separate Node/Express backend; keeps deployment, types, and server-side secret handling unified. |
-| Database | PostgreSQL (via Supabase) | Native relational schema for tracks, categories, order click logs, and analytics; supports vector embeddings (`pgvector`) if semantic search scales. |
-| Queries | Drizzle ORM | Lightweight, type-safe SQL-first queries without the heavy overhead, cold-start latency, or engine bloat of Prisma. |
-| Auth (Admin) | Supabase Auth (or Iron-Session for Admin Dashboard) | Authenticates only the studio owner for the dashboard; guest visitors require zero authentication. |
-| File Storage | Cloudflare R2 | S3-compatible audio and image storage with zero egress bandwidth fees, critical for audio streaming with high listening volumes. |
-| AI Integration | Google GenAI SDK (`gemini-1.5-flash`) | Fast, cost-efficient server-side execution for semantic intent matching, SEO title/description generation, and the studio AI concierge. |
-| Hosting | Vercel | Seamless edge caching, ISR for track pages, and instant Next.js App Router optimization. |
-| Testing | Vitest + Playwright | Vitest for unit testing pure utility helpers (WhatsApp string builders, schema formatters); Playwright for critical mobile funnel checkout flows. |
+| Frontend | TanStack Start + TanStack Router + React | SSR, file-based routing, and persistent client audio state. |
+| Styling | Tailwind CSS 4 + CSS tokens | Shared light/dark visual system and responsive RTL layout. |
+| Audio Engine | Browser Audio API + Media Session | Persistent playback across internal navigation without a heavyweight player dependency. |
+| Backend | Nitro server entry + Express-compatible shim | One server path for auth, catalog writes, gifts, AI, YouTube, and Push. |
+| Database | Supabase PostgreSQL | RLS, Storage, Auth integration, and typed JS client. |
+| Auth (Admin) | Supabase Auth + HMAC-signed HttpOnly session | Admin allowlist, CSRF, TTL, and server-only mutations. |
+| File Storage | Supabase Storage | Audio, artwork, gift media, and signed access paths. |
+| AI Integration | Lovable AI Gateway through the server | Grounded public concierge and admin assistant without exposing provider keys. |
+| Hosting | Vercel Node.js runtime | Compatible with Nitro SSR and the `web-push` Node package. |
+| Testing | Vitest + jsdom | Fast unit and component coverage for critical business rules. |
 
 Do not add a dependency that overlaps with a row in this table without asking.
-
 ## 03 Project structure
-
-
 ```
-
 /
-AGENTS.md            agent instructions (read first)
-docs/                PRD.md, DESIGN_SYSTEM.md, ARCHITECTURE.md
-src/
-app/               Next.js App Router (pages and API route handlers only)
-(public)/        visitor routes: /, /tracks/[slug], /category/[slug], /about
-admin/           admin dashboard routes: /admin, /admin/tracks, /admin/settings
-api/             API routes: /api/tracks, /api/ai/seo, /api/settings, /api/backup
-components/
-ui/              primitives: Button, Input, Modal, Badge, Sheet (see DESIGN_SYSTEM.md)
-player/          AudioPlayerProvider, StickyPlayer, WaveformVisualizer
-features/        TrackCard, TrackGrid, WhatsAppOrderModal, AIConciergeWidget, AdminMediaUploader
-context/           AudioContext (global audio playback state across route transitions)
-lib/
-db/              schema.ts, migrations, db client connection
-services/        tracks.ts, analytics.ts, settings.ts, backup.ts, ai.ts
-integrations/    r2.ts (storage), gemini.ts (AI Studio SDK), supabase.ts
-utils/           formatters.ts, whatsapp.ts (message generator), seo.ts
-types/             shared TypeScript interfaces (Track, Category, AnalyticsEvent)
-public/              static brand assets and fallbacks
-tests/               e2e mobile conversion tests
-
+├── src/routes/                 # TanStack file routes, SSR head, API catch-all
+├── src/orchest/                # Public app, admin dashboard, services, server API
+├── src/pwa/                    # Service Worker registration and install lifecycle
+├── src/integrations/supabase/  # Browser/server clients and generated types
+├── public/                     # PWA, SEO, logo, and offline assets
+├── supabase/migrations/        # Ordered database migrations
+├── scripts/                    # Build-time SEO asset generation
+├── docs/                       # Product, design, and architecture documentation
+├── package.json
+└── vite.config.ts
 ```
-
 Where new code belongs:
-- A new page or route: `src/app/(public)/<route>/page.tsx` or `src/app/admin/<route>/page.tsx`. Thin wrapper calling a service.
-- Audio playback logic: `src/context/AudioContext.tsx` or `src/components/player/`.
-- Business rules & database access: `src/lib/services/<domain>.ts`.
-- Third-party client initialization (Gemini, R2, Storage): `src/lib/integrations/<vendor>.ts`, invoked by a service, never directly by client components.
-- WhatsApp message formatting logic: `src/lib/utils/whatsapp.ts`.
-- UI primitives: `src/components/ui/`, adhering strictly to `DESIGN_SYSTEM.md`.
+- A public or admin page: `src/routes/` or `src/orchest/components/`.
+- Business/database access: `src/orchest/services/` and `src/orchest/server/api.ts`.
+- Server-only integrations: `src/orchest/server/` and `src/integrations/supabase/client.server.ts`.
+- PWA lifecycle: `src/pwa/` and `public/sw.js`.
+- Static brand/SEO assets: `public/`.
 
 ## 04 Data flow
 
@@ -129,8 +110,8 @@ Allowed:
 
 Never:
 - Client components import `src/lib/db/*` or use server database clients directly.
-- Server-side API keys (`GEMINI_API_KEY`, storage credentials) leaked into `NEXT_PUBLIC_*` variables.
-- Audio playback interrupted or re-instantiated upon internal Next.js client-side route navigations (`<Link>`).
+- Server-side API keys (service role, AI, YouTube, Push) leaked into `VITE_*` variables.
+- Audio playback interrupted or re-instantiated upon internal TanStack client-side route navigations (`<Link>`).
 - Direct mutation of WhatsApp settings without going through admin authentication checks.
 
 ## 06 Decisions that look wrong but are intentional
@@ -146,7 +127,7 @@ The agent must not "fix" or change these:
 ## 07 Scalability and future considerations
 
 - Expected scale for v1: 500 to 2,000 daily active listeners, 100 to 500 catalog tracks, 50 to 150 daily WhatsApp order leads.
-- Media storage: Cloudflare R2 provides zero egress fees, removing bandwidth cost spikes as listening hours grow.
+- Media storage: Supabase Storage is the current source of truth; CDN optimization can be added after measuring real traffic.
 - Audio caching: Static audio files are delivered through Cloudflare CDN edges with long-lived `Cache-Control: public, max-age=31536000` headers.
 - Known limits: Single database instance (Supabase PostgreSQL pool); backups are generated on-demand as JSON/CSV downloads rather than scheduled automated multi-region snapshots in v1.
 - Planned for v2: Multi-regional CDN streaming optimization, automatic Telegram notification webhook to the studio owner whenever an order modal is submitted, and automated bulk MP3 ID3 tag extraction.
@@ -158,7 +139,7 @@ If a task requires any of the following, stop, name the architectural conflict, 
 - Introducing mandatory customer authentication or account creation for listening/ordering.
 - Replacing the client-side `wa.me` flow with a forced in-app payment gateway.
 - Changing `AudioContext` architecture in a way that restarts audio playback on page navigation.
-- Adding heavyweight backend libraries (like Prisma or Express) that duplicate existing Next.js / Drizzle setups.
+- Adding heavyweight backend libraries (like Prisma or a second server framework) that duplicate the existing Nitro/Supabase setup.
 - Exposing any admin functionality or backup endpoints without server-side authentication validation.
 
 ```

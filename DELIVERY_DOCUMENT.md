@@ -5,6 +5,10 @@
 **المستودع:** `r7-yn/studio-bond`
 **الفرع الرئيسي:** `main`
 
+> **تحديث التسليم — 24 أكتوبر 2026**
+> تم مزامنة commit `3a4426d` محلياً والتحقق من `npm ci` وTypeScript والاختبارات (24/24) وproduction build. تم اعتماد شعار العميل في أصول الموقع، وإضافة `og-image.jpg` وأيقونات PWA، وتحديث وثيقة المعمارية، وإضافة migration تصحيحية للقيود. لا تزال خطوات Supabase/Vercel الحية تحتاج أسراراً ونطاقاً وصلاحيات تطبيق.
+
+
 ---
 
 ## 1. ملخص تنفيذي
@@ -39,7 +43,7 @@
 | **Auth** | HMAC-signed tokens | — | Admin-only, stateless |
 | **Storage** | Supabase Storage | — | Audio + Images |
 | **AI** | Lovable AI Gateway (Gemini) | — | Semantic search + Admin assistant |
-| **PWA** | Service Worker + Web Push | — | Installable app + Push notifications |
+| **PWA** | Service Worker + Web Push | — | Installable app + Push notifications; Vercel Node runtime |
 | **Testing** | Vitest + jsdom | 4.x | Unit testing |
 
 ### هيكل المجلدات
@@ -106,11 +110,13 @@ studio-bond/
 │   ├── offline.html            # Offline fallback page
 │   ├── robots.txt              # SEO: blocks /api/, /gift/, admin
 │   ├── icon-192.png            # PWA icon
-│   ├── icon-512.png            # PWA icon
+│   ├── icon-512.png            # PWA icon from approved studio logo
+│   ├── logo-studio-orchest.jpg   # Approved full studio logo
+│   ├── og-image.jpg               # 1200×630 social preview
 │   └── favicon.ico
 │
 ├── supabase/
-│   └── migrations/             # 10 migration files
+│   └── migrations/             # 11 migration files
 │
 ├── scripts/
 │   └── generate-seo-assets.mjs # Postbuild: sitemap.xml + robots
@@ -177,6 +183,9 @@ supabase/migrations/20261023195122_b5674562-5941-4fd5-a0ac-cda635b88299.sql
 
 -- 9. تكاملات المنصة (push_subscriptions, youtube_connections, ai_audit_logs)
 supabase/migrations/20261024000000_platform_integrations.sql
+
+-- 10. تقوية قيود تكاملات المنصة بعد التكرار التاريخي
+supabase/migrations/20261024100000_harden_platform_integration_constraints.sql
 ```
 
 ---
@@ -245,6 +254,8 @@ VAPID_SUBJECT=mailto:admin@your-domain.com
 ---
 
 ## 5. تدفق البيانات والأمان
+
+> **Runtime decision:** تم تثبيت `nitro: { preset: "vercel" }` في `vite.config.ts` لأن Web Push يعتمد على Node crypto APIs.
 
 ### تدفق طلب الزبون (Public Flow)
 
@@ -495,7 +506,7 @@ VAPID_SUBJECT=mailto:admin@your-domain.com
 | PWA Runtime | `src/pwa/PwaRuntime.tsx` |
 | Styles | `src/styles.css` (Orchest design tokens) |
 | Public Assets | `public/` (sw.js, manifest, icons, offline) |
-| Migrations | `supabase/migrations/` (10 ملفات) |
+| Migrations | `supabase/migrations/` (11 ملفات) |
 | SEO Script | `scripts/generate-seo-assets.mjs` |
 | Tests | `src/orchest/services/*.test.ts` + `src/orchest/utils/*.test.ts` |
 
@@ -506,15 +517,15 @@ VAPID_SUBJECT=mailto:admin@your-domain.com
 > مرتّبة بالأولوية — يجب تنفيذها كلها قبل نشر المنصة على العملاء
 
 ```
-☐ [حرج]  حذف allowedHosts sandbox من vite.config.ts
+☑ [منجز]  حذف allowedHosts sandbox من vite.config.ts
 ☐ [حرج]  أخذ backup من Supabase
-☐ [حرج]  تطبيق 9 migrations بالترتيب على Supabase
+☐ [حرج]  أخذ backup ثم تطبيق 11 migrations بالترتيب على Supabase
 ☐ [حرج]  إنشاء حساب Admin في Supabase Auth
 ☐ [حرج]  إضافة user_id للمدير في جدول orchest_admin_users
 ☐ [حرج]  تفعيل Leaked Password Protection في Supabase
 ☐ [حرج]  ضبط جميع متغيرات البيئة في Vercel
-☐ [مهم]  ترجمة رسائل الخطأ (404, Error) للعربية
-☐ [مهم]  إنشاء وإضافة og:image (1200×630px)
+☑ [منجز]  ترجمة رسائل الخطأ (404, Error) للعربية
+☑ [منجز]  إنشاء وإضافة og:image (1200×630px) من شعار الاستوديو المعتمد
 ☐ [مهم]  اختبار Preview deployment على Android + iOS
 ☐ [مهم]  اختبار تسجيل الدخول وصلاحيات الإدارة
 ☐ [مهم]  اختبار نافذة الطلب ورابط واتساب المُولَّد

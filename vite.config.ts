@@ -10,6 +10,8 @@ export default defineConfig({
   vite: {
     // allowedHosts removed — the default (auto) is correct for production deployments
   },
+  // The production target is Vercel Node.js because web-push requires Node crypto APIs.
+  nitro: { preset: "vercel" },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
