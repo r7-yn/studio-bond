@@ -31,6 +31,7 @@ import {
   Layers,
   FolderPlus,
   Gift,
+  BookOpen,
 } from "lucide-react";
 import {
   Track,
@@ -57,6 +58,7 @@ import { GiftDeliveryPanel } from "./GiftDeliveryPanel";
 import { AdminAssistantPanel } from "./AdminAssistantPanel";
 import { YouTubeImportPanel } from "./YouTubeImportPanel";
 import { PwaNotificationsPanel } from "./PwaNotificationsPanel";
+import { AdminSiteDocumentation } from "./AdminSiteDocumentation";
 import { uploadMediaFile } from "../services/mediaUpload";
 import { adminLoadAllOrders, type AdminOrdersQuery } from "../services/catalogDb";
 
@@ -144,6 +146,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     | "assistant"
     | "youtube"
     | "settings"
+    | "documentation"
   >("tracks");
   const [searchTerm, setSearchTerm] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
@@ -676,7 +679,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Tabs navigation */}
-      <div className="flex items-center gap-2 border-b border-white/10 pb-4 mb-6">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-4 mb-6">
         <button
           onClick={() => setActiveTab("tracks")}
           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
@@ -783,6 +786,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <Settings className="w-4 h-4" />
           <span>الإعدادات والنسخ الاحتياطي</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("documentation")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "documentation"
+              ? "bg-[#D4AF37] text-black shadow-md"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          <BookOpen className="w-4 h-4 shrink-0" />
+          <span>توثيق الموقع وميزاته لموقع أوركست</span>
         </button>
       </div>
 
@@ -1616,6 +1630,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {activeTab === "documentation" && <AdminSiteDocumentation theme={theme} />}
 
       {/* Modal: Add New Track (إضافة عمل جديد) */}
       {isAddModalOpen && (
