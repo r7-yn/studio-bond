@@ -1,6 +1,5 @@
 // Minimal Express-like shim so the original server handlers run on the Worker unchanged.
 type Handler = (req: ShimReq, res: ShimRes) => unknown;
-
 export interface ShimReq {
   body: Record<string, unknown> | undefined;
   headers: { cookie?: string; [k: string]: string | undefined };
@@ -10,20 +9,16 @@ export interface ShimReq {
   ip: string;
   socket: { remoteAddress?: string };
 }
-
 export interface ShimRes {
   status: (code: number) => ShimRes;
   json: (data: unknown) => ShimRes;
   setHeader: (name: string, value: string) => void;
 }
-
 const routes = new Map<string, Handler>();
-
 export const app = {
   get: (path: string, h: Handler) => routes.set(`GET ${path}`, h),
   post: (path: string, h: Handler) => routes.set(`POST ${path}`, h),
 };
-
 function findRoute(
   method: string,
   pathname: string,
@@ -60,12 +55,10 @@ function findRoute(
   }
   return null;
 }
-
 export async function dispatch(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const match = findRoute(request.method, url.pathname);
   if (!match) return Response.json({ error: "Not found" }, { status: 404 });
-
   let body: Record<string, unknown> | undefined;
   if (request.method !== "GET") {
     const text = await request.text();
@@ -90,7 +83,6 @@ export async function dispatch(request: Request): Promise<Response> {
     ip,
     socket: { remoteAddress: ip },
   };
-
   let status = 200;
   let payload: unknown = null;
   const outHeaders = new Headers({ "content-type": "application/json" });
@@ -110,8 +102,7 @@ export async function dispatch(request: Request): Promise<Response> {
   await match.handler(req, res);
   return new Response(JSON.stringify(payload), { status, headers: outHeaders });
 }
-
-// Gemini-style schema type names, converted to JSON Schema for the AI prompt.
+// Gemini-style schema type names, included in the JSON instruction sent to the model.
 export const Type = {
   OBJECT: "object",
   STRING: "string",
@@ -120,7 +111,6 @@ export const Type = {
   BOOLEAN: "boolean",
   INTEGER: "integer",
 } as const;
-
 interface GenerateArgs {
   model?: string;
   contents: string;
@@ -131,37 +121,49 @@ interface GenerateArgs {
     systemInstruction?: string;
   };
 }
-
-/** Replaces the Gemini SDK with the Lovable AI Gateway; returns null when no key so handlers use their fallbacks. */
-export function createGatewayAiClient() {
+/** Server-side Google Gemini REST client; API handlers retain their deterministic fallbacks on error. */
+export function createGeminiAiClient() {
   return {
     models: {
       async generateContent({ model, contents, config }: GenerateArgs): Promise<{ text: string }> {
-        const key = process.env["LOVABLE_API_KEY"];
-        if (!key) throw new Error("LOVABLE_API_KEY missing");
+        const key = process.env["GEMINI_API_KEY"]?.trim();
+        if (!key) throw new Error("GEMINI_API_KEY missing");
+        const modelId =
+          process.env["GEMINI_MODEL"]?.trim() ||
+          (model === "gemini-3.8-flash" ? "gemini-flash-latest" : model || "gemini-flash-latest");
         const schemaNote = config?.responseSchema
           ? `\n\nأجب بصيغة JSON فقط وفق هذا المخطط:\n${JSON.stringify(config.responseSchema)}`
           : "";
-        const messages = [
+        const requestBody = {
           ...(config?.systemInstruction
-            ? [{ role: "system", content: config.systemInstruction }]
-            : []),
-          { role: "user", content: contents + schemaNote },
-        ];
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: `google/${model ?? "gemini-3.8-flash"}`,
-            messages,
-            temperature: config?.temperature,
-            response_format: config?.responseSchema ? { type: "json_object" } : undefined,
-          }),
-        });
-        if (!r.ok) throw new Error(`AI gateway ${r.status}: ${await r.text()}`);
-        const data = (await r.json()) as { choices?: { message?: { content?: string } }[] };
-        const text = data.choices?.[0]?.message?.content ?? "";
-        return { text: text.replace(/^```(?:json)?\s*|\s*```$/g, "") };
+            ? { systemInstruction: { parts: [{ text: config.systemInstruction }] } }
+            : {}),
+          contents: [{ role: "user", parts: [{ text: contents + schemaNote }] }],
+          generationConfig: {
+            ...(typeof config?.temperature === "number" ? { temperature: config.temperature } : {}),
+            ...(config?.responseMimeType ? { responseMimeType: config.responseMimeType } : {}),
+          },
+        };
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`,
+          {
+            method: "POST",
+            headers: { "X-goog-api-key": key, "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          },
+        );
+        if (!response.ok) {
+          throw new Error(
+            `Gemini API ${response.status}: ${(await response.text()).slice(0, 500)}`,
+          );
+        }
+        const data = (await response.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const text =
+          data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+        if (!text) throw new Error("Gemini API returned no text content");
+        return { text: text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim() };
       },
     },
   };

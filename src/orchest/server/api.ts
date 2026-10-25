@@ -9,7 +9,7 @@ import {
 } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Buffer } from "node:buffer";
-import { app, Type, createGatewayAiClient, type ShimReq, type ShimRes } from "./shim";
+import { app, Type, createGeminiAiClient, type ShimReq, type ShimRes } from "./shim";
 import { parseOfferDateBoundary } from "../utils/offerLogic";
 
 interface CatalogTrack {
@@ -368,7 +368,7 @@ app.post("/api/auth/logout", (_req, res) => {
   return res.json({ authenticated: false });
 });
 
-const aiClient = createGatewayAiClient();
+const aiClient = createGeminiAiClient();
 
 interface AdminAssistantEvidence {
   ref: string;
